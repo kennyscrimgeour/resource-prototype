@@ -1,65 +1,178 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useState } from 'react'
+import Link from 'next/link'
+import Sidebar from '@/components/Sidebar'
+import Badge from '@/components/ui/Badge'
+import Avatar from '@/components/ui/Avatar'
+import BudgetBar from '@/components/ui/BudgetBar'
+import ProjectCard from '@/components/ProjectCard'
+import { useStore } from '@/lib/store'
+import { useDialog } from '@/lib/useDialog'
+import { Search, Bell } from 'lucide-react'
+import type { ProjectStatus } from '@/data/projects'
+
+type SectorFilter = 'All' | 'Finance' | 'Energy' | 'Pro Services'
+type StatusFilter = 'All' | ProjectStatus
+
+export default function ProjectsView() {
+  const { projects, people, toggleTheme } = useStore()
+  const { openProject, openPerson } = useDialog()
+
+  function handleOpenPerson(initials: string) {
+    const person = people.find(p => p.initials === initials)
+    if (person) openPerson(person.id)
+  }
+  const [sectorFilter, setSectorFilter] = useState<SectorFilter>('All')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
+
+  const filtered = projects.filter(p => {
+    const sectorMatch = sectorFilter === 'All' || p.sector === sectorFilter
+    const statusMatch = statusFilter === 'All' || p.status === statusFilter
+    return sectorMatch && statusMatch
+  })
+
+  const sectorFilters: SectorFilter[] = ['All', 'Finance', 'Energy', 'Pro Services']
+  const statusFilters: { label: string; value: StatusFilter; activeVariant: 'success' | 'warning' | 'error' }[] = [
+    { label: 'Healthy',          value: 'Healthy',          activeVariant: 'success' },
+    { label: 'At risk',          value: 'At risk',          activeVariant: 'warning' },
+    { label: 'Attention needed', value: 'Attention needed', activeVariant: 'error'   },
+  ]
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+      <Sidebar activePage="projects" />
+
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Nav bar */}
+        <header
+          className="flex items-center justify-between px-6 flex-shrink-0"
+          style={{ backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-primary)', height: 60 }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-base" style={{ color: 'var(--text-primary)' }}>Projects</span>
+            <Badge variant="default" size="sm">{projects.length} projects</Badge>
+          </div>
+
+          <div className="flex items-center rounded-lg p-1 gap-1" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', flexShrink: 0 }}>
+            {[
+              { label: 'People',   href: '/people'   },
+              { label: 'Projects', href: '/'         },
+              { label: 'Timeline', href: '/timeline' },
+            ].map(({ label, href }) => (
+              <Link
+                key={label}
+                href={href}
+                className="px-3 py-1 rounded font-medium text-sm transition-colors"
+                style={label === 'Projects'
+                  ? { backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }
+                  : { color: 'var(--text-secondary)', border: '1px solid transparent' }}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm overflow-hidden"
+              style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-tertiary)', width: 260, minWidth: 0 }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              <Search size={14} className="flex-shrink-0" style={{ color: 'var(--text-tertiary)' }} />
+              <span className="whitespace-nowrap truncate">Search projects, people, skills… ⌘K</span>
+            </div>
+            <Bell size={18} style={{ color: 'var(--text-secondary)' }} />
+            <Avatar initials="KS" size="sm" style={{ cursor: 'pointer' }} onClick={() => toggleTheme()} />
+          </div>
+        </header>
+
+        {/* Page header — title + HUD metrics inline left */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'nowrap',
+            gap: 20,
+            paddingLeft: 24,
+            paddingRight: 24,
+            flexShrink: 0,
+            height: 56,
+            overflow: 'hidden',
+            backgroundColor: 'var(--bg-primary)',
+            borderBottom: '1px solid var(--border-primary)',
+          }}
+        >
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>All Projects</h1>
+
+          <div style={{ width: 1, height: 24, backgroundColor: 'var(--border-primary)', flexShrink: 0 }} />
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Utilisation</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--warning-text)', whiteSpace: 'nowrap' }}>91%</span>
+          </div>
+
+          <div style={{ width: 1, height: 24, backgroundColor: 'var(--border-primary)', flexShrink: 0 }} />
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Bench</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>1</span>
+          </div>
+
+          <div style={{ width: 1, height: 24, backgroundColor: 'var(--border-primary)', flexShrink: 0 }} />
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, width: 160 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Aggregated Budget</span>
+              <Badge variant="success" size="sm">Healthy</Badge>
+            </div>
+            <BudgetBar budgetUsed={0.72} height={6} />
+          </div>
+
+          <button style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            Expand ▼
+          </button>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Filter bar */}
+        <div
+          className="flex items-center gap-1.5 px-6 flex-shrink-0"
+          style={{ backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-primary)', height: 44 }}
+        >
+          {sectorFilters.map(f => (
+            <button key={f} onClick={() => setSectorFilter(f)}>
+              <Badge variant={sectorFilter === f ? 'brand' : 'default'} size="sm">{f}</Badge>
+            </button>
+          ))}
+
+          <div className="w-px h-4 mx-1" style={{ backgroundColor: 'var(--border-secondary)' }} />
+
+          {statusFilters.map(f => (
+            <button key={f.value} onClick={() => setStatusFilter(statusFilter === f.value ? 'All' : f.value)}>
+              <Badge variant={statusFilter === f.value ? f.activeVariant : 'default'} size="sm">
+                {f.label}
+              </Badge>
+            </button>
+          ))}
+
+          <div className="ml-auto flex items-center gap-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+            Sort: Last updated <span>↓</span>
+          </div>
         </div>
-      </main>
+
+        {/* Project grid */}
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            {filtered.map(p => (
+              <ProjectCard key={p.id} project={p} onOpen={() => openProject(p.id)} onOpenPerson={handleOpenPerson} />
+            ))}
+          </div>
+          {filtered.length === 0 && (
+            <div className="flex items-center justify-center h-48 text-sm" style={{ color: 'var(--text-tertiary)' }}>
+              No projects match the selected filters.
+            </div>
+          )}
+        </main>
+      </div>
     </div>
-  );
+  )
 }
