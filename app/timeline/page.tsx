@@ -107,7 +107,7 @@ function HudDivider() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function TimelinePage() {
-  const { people, projects, toggleTheme } = useStore()
+  const { people, projects, toggleTheme, updateAssignment } = useStore()
   const { openProject, openPerson }       = useDialog()
   const [deptFilter, setDeptFilter] = useState<DeptFilter>('All')
   const [viewMode]                  = useState<ViewMode>('Wk')
@@ -367,15 +367,25 @@ export default function TimelinePage() {
 
                       return (
                         <div
-                          key={ri}
-                          style={{ position: 'absolute', left: barLeft, top: barTop, cursor: 'pointer' }}
-                          onClick={() => openProject(a.projectId)}
+                          key={`${a.projectId}-${a.startDate}`}
+                          style={{ position: 'absolute', left: barLeft, top: barTop }}
                         >
                           <TimelineBar
                             projectName={proj.name}
                             client={proj.client}
                             color={PROJECT_COLORS[a.projectId] ?? '#06b6d4'}
                             width={barWidth}
+                            dayRate={person.dayRate}
+                            allocationPct={a.allocationPct}
+                            startCol={startCol}
+                            endCol={endCol}
+                            colWidth={COL_W}
+                            weeks={weeks}
+                            todayCol={todayCol}
+                            onBarClick={() => openProject(a.projectId)}
+                            onResizeEnd={(newStart, newEnd) =>
+                              updateAssignment(person.id, a.projectId, { startDate: newStart, endDate: newEnd })
+                            }
                           />
                         </div>
                       )

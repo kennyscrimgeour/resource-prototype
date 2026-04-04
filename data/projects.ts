@@ -23,9 +23,13 @@ export interface Project {
   dueDate: string
   allocated: number
   capacity: number
-  budgetUsed: number
-  overBudget: boolean
-  budgetOverrun: number
+  /** Total project budget in £ */
+  budgetTotal: number
+  /**
+   * Committed spend already incurred (rolled-off resources, invoiced work, etc.)
+   * Acts as a floor so removing current resources cannot reset the bar to zero.
+   */
+  historicalSpend: number
   warningText: string | null
   team: TeamMember[]
 }
@@ -45,9 +49,8 @@ export const projects: Project[] = [
     dueDate: 'Due 30 Sep',
     allocated: 5,
     capacity: 6,
-    budgetUsed: 0.84,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 185000,
+    historicalSpend: 28500,
     warningText: 'Burn rate 18% above forecast',
     team: [
       { initials: 'NB', colorIndex: 1 },
@@ -70,9 +73,8 @@ export const projects: Project[] = [
     dueDate: 'Due 15 Aug',
     allocated: 2,
     capacity: 3,
-    budgetUsed: 0.58,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 75000,
+    historicalSpend: 9200,
     warningText: null,
     team: [{ initials: 'TC', colorIndex: 2 }, { initials: 'PW', colorIndex: 1 }],
   },
@@ -89,9 +91,8 @@ export const projects: Project[] = [
     dueDate: 'Due 12 Jun',
     allocated: 3,
     capacity: 4,
-    budgetUsed: 0.52,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 50000,
+    historicalSpend: 7800,
     warningText: null,
     team: [
       { initials: 'AB', colorIndex: 0 },
@@ -112,9 +113,8 @@ export const projects: Project[] = [
     dueDate: 'Due 28 Aug',
     allocated: 3,
     capacity: 4,
-    budgetUsed: 1.0,
-    overBudget: true,
-    budgetOverrun: 0.3,
+    budgetTotal: 125000,
+    historicalSpend: 42000,
     warningText: '14% over budget — escalate now',
     team: [
       { initials: 'PS', colorIndex: 8 },
@@ -135,9 +135,8 @@ export const projects: Project[] = [
     dueDate: 'Due 3 Jul',
     allocated: 3,
     capacity: 4,
-    budgetUsed: 0.84,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 100000,
+    historicalSpend: 38500,
     warningText: 'UAT delays risking go-live date',
     team: [
       { initials: 'CJ', colorIndex: 5 },
@@ -158,9 +157,8 @@ export const projects: Project[] = [
     dueDate: 'Due 19 Sep',
     allocated: 3,
     capacity: 4,
-    budgetUsed: 0.6,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 85000,
+    historicalSpend: 6400,
     warningText: null,
     team: [
       { initials: 'SC', colorIndex: 3 },
@@ -181,9 +179,8 @@ export const projects: Project[] = [
     dueDate: 'Due 25 Nov',
     allocated: 2,
     capacity: 4,
-    budgetUsed: 0.4,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 95000,
+    historicalSpend: 4200,
     warningText: null,
     team: [
       { initials: 'DM', colorIndex: 6 },
@@ -203,9 +200,8 @@ export const projects: Project[] = [
     dueDate: 'Due 11 Jul',
     allocated: 3,
     capacity: 3,
-    budgetUsed: 0.82,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 100000,
+    historicalSpend: 21000,
     warningText: 'Senior dev overloaded — CJ on two projects',
     team: [
       { initials: 'CJ', colorIndex: 5 },
@@ -225,9 +221,8 @@ export const projects: Project[] = [
     dueDate: 'Due 30 Apr',
     allocated: 2,
     capacity: 2,
-    budgetUsed: 0.72,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 50000,
+    historicalSpend: 16800,
     warningText: null,
     team: [
       { initials: 'FO', colorIndex: 7 },
@@ -249,9 +244,8 @@ export const projects: Project[] = [
     dueDate: 'Starts 4 May',
     allocated: 0,
     capacity: 5,
-    budgetUsed: 0,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 110000,
+    historicalSpend: 0,
     warningText: null,
     team: [],
   },
@@ -268,9 +262,8 @@ export const projects: Project[] = [
     dueDate: 'Starts 8 Jun',
     allocated: 0,
     capacity: 6,
-    budgetUsed: 0,
-    overBudget: false,
-    budgetOverrun: 0,
+    budgetTotal: 125000,
+    historicalSpend: 0,
     warningText: null,
     team: [],
   },

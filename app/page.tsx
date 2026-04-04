@@ -9,6 +9,7 @@ import BudgetBar from '@/components/ui/BudgetBar'
 import ProjectCard from '@/components/ProjectCard'
 import { useStore } from '@/lib/store'
 import { useDialog } from '@/lib/useDialog'
+import { computeProjectBudget } from '@/lib/budget'
 import { Search, Bell } from 'lucide-react'
 import type { ProjectStatus } from '@/data/projects'
 
@@ -120,12 +121,12 @@ export default function ProjectsView() {
 
           <div style={{ width: 1, height: 24, backgroundColor: 'var(--border-primary)', flexShrink: 0 }} />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, width: 160 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, width: 160 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Aggregated Budget</span>
               <Badge variant="success" size="sm">Healthy</Badge>
             </div>
-            <BudgetBar budgetUsed={0.72} height={6} />
+            <BudgetBar actualSpend={54000} projectedSpend={18000} budgetTotal={100000} height={6} />
           </div>
 
           <button style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, whiteSpace: 'nowrap' }}>
@@ -163,7 +164,7 @@ export default function ProjectsView() {
         <main className="flex-1 overflow-y-auto p-6">
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
             {filtered.map(p => (
-              <ProjectCard key={p.id} project={p} onOpen={() => openProject(p.id)} onOpenPerson={handleOpenPerson} />
+              <ProjectCard key={p.id} project={p} budget={computeProjectBudget(p, people)} onOpen={() => openProject(p.id)} onOpenPerson={handleOpenPerson} />
             ))}
           </div>
           {filtered.length === 0 && (

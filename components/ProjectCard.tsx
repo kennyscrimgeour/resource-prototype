@@ -1,4 +1,5 @@
 import type { Project, ProjectStatus } from '@/data/projects'
+import type { ProjectBudgetResult } from '@/lib/budget'
 import Badge from '@/components/ui/Badge'
 import Avatar from '@/components/ui/Avatar'
 import BudgetBar from '@/components/ui/BudgetBar'
@@ -10,7 +11,7 @@ const statusBadge: Record<ProjectStatus, { variant: 'success' | 'warning' | 'err
   'Attention needed': { variant: 'error',   label: 'Attention needed' },
 }
 
-export default function ProjectCard({ project, onOpen, onOpenPerson }: { project: Project; onOpen?: () => void; onOpenPerson?: (initials: string) => void }) {
+export default function ProjectCard({ project, budget, onOpen, onOpenPerson }: { project: Project; budget: ProjectBudgetResult; onOpen?: () => void; onOpenPerson?: (initials: string) => void }) {
   const { variant, label } = statusBadge[project.status]
   const isOverAllocated    = project.allocated > project.capacity
   const allocationColor    = isOverAllocated ? 'var(--error-text)' : 'var(--text-secondary)'
@@ -48,7 +49,12 @@ export default function ProjectCard({ project, onOpen, onOpenPerson }: { project
           <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>Phase progress</span>
           <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>{project.dueDate}</span>
         </div>
-        <PhaseProgressBar phase={project.phase} progress={project.phaseProgress} />
+        <PhaseProgressBar
+          phase={project.phase}
+          progress={project.phaseProgress}
+          phaseBudgets={budget.phaseBudgets}
+          phaseSpend={budget.phaseSpend}
+        />
       </div>
 
       <div className="h-px" style={{ backgroundColor: 'var(--border-primary)' }} />
@@ -57,16 +63,19 @@ export default function ProjectCard({ project, onOpen, onOpenPerson }: { project
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2 min-w-0">
           <span className="text-[11px] flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>Budget vs Actual</span>
-          {project.warningText && (
-            <span className="text-[11px] truncate text-right" style={{ color: 'var(--warning-text)' }}>
-              ⚠ {project.warningText}
-            </span>
-          )}
+          <span className="text-[11px] font-medium flex-shrink-0" style={{ color: budget.overBudget ? 'var(--error-text)' : 'var(--text-primary)' }}>
+            £{(budget.actualSpend + budget.projectedSpend).toLocaleString()} / £{project.budgetTotal.toLocaleString()} ({project.budgetTotal > 0 ? Math.round((budget.actualSpend + budget.projectedSpend) / project.budgetTotal * 100) : 0}%)
+          </span>
         </div>
+        {project.warningText && (
+          <span className="text-[11px] truncate" style={{ color: 'var(--warning-text)' }}>
+            ⚠ {project.warningText}
+          </span>
+        )}
         <BudgetBar
-          budgetUsed={project.budgetUsed}
-          overBudget={project.overBudget}
-          budgetOverrun={project.budgetOverrun}
+          actualSpend={budget.actualSpend}
+          projectedSpend={budget.projectedSpend}
+          budgetTotal={project.budgetTotal}
         />
       </div>
 

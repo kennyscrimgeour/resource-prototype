@@ -3,14 +3,24 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '@/lib/store'
 import type { Project } from '@/data/projects'
+import type { Assignment } from '@/data/people'
 import Avatar from '@/components/ui/Avatar'
 
 interface AddResourcePopupProps {
   project: Project
   onClose: () => void
+  /** When provided, called instead of writing directly to the store (draft mode). */
+  onConfirm?: (personId: string, assignment: Assignment) => void
+  /** Person IDs already in the draft — excluded from the available list. */
+  excludePersonIds?: string[]
 }
 
-export default function AddResourcePopup({ project, onClose }: AddResourcePopupProps) {
+export default function AddResourcePopup({
+  project,
+  onClose,
+  onConfirm,
+  excludePersonIds = [],
+}: AddResourcePopupProps) {
   const { people, addAssignment } = useStore()
   const [search,        setSearch]        = useState('')
   const [selectedId,    setSelectedId]    = useState<string | null>(null)
@@ -26,6 +36,7 @@ export default function AddResourcePopup({ project, onClose }: AddResourcePopupP
 
   const available = people.filter(p => {
     if (p.assignments.some(a => a.projectId === project.id)) return false
+    if (excludePersonIds.includes(p.id)) return false
     if (!search) return true
     const q = search.toLowerCase()
     return p.name.toLowerCase().includes(q) || p.role.toLowerCase().includes(q)
@@ -35,7 +46,12 @@ export default function AddResourcePopup({ project, onClose }: AddResourcePopupP
 
   function handleConfirm() {
     if (!selectedId) return
-    addAssignment(selectedId, { projectId: project.id, startDate, endDate, allocationPct })
+    const assignment: Assignment = { projectId: project.id, startDate, endDate, allocationPct }
+    if (onConfirm) {
+      onConfirm(selectedId, assignment)
+    } else {
+      addAssignment(selectedId, assignment)
+    }
     onClose()
   }
 
