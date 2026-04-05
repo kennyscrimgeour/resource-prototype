@@ -11,6 +11,11 @@ export interface Assignment {
   /** ISO date — when the person rolls off */
   endDate: string
   allocationPct: number
+  /**
+   * The allocation % at the time of the last Apply — locks historical spend
+   * so slider changes only affect the projected window.
+   */
+  committedAllocationPct?: number
 }
 
 export interface Person {

@@ -26,10 +26,19 @@ function getDept(role: string): DeptFilter {
   return 'Design'
 }
 
-function getUtilStatus(pct: number, projects?: string[]): UtilFilter {
-  if (!projects || projects.length === 0) return 'Available'
-  if (pct > 100) return 'Over-allocated'
-  return 'Allocated'
+const _d = new Date()
+const TODAY_ISO = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`
+
+function getActiveAlloc(person: import('@/data/people').Person): number {
+  return person.assignments
+    .filter(a => a.endDate >= TODAY_ISO)
+    .reduce((sum, a) => sum + a.allocationPct, 0)
+}
+
+function getUtilStatus(totalAlloc: number): UtilFilter {
+  if (totalAlloc > 100) return 'Over-allocated'
+  if (totalAlloc > 0)   return 'Allocated'
+  return 'Available'
 }
 
 const utilFilters: { label: string; value: UtilFilter; activeVariant: 'success' | 'warning' | 'error' }[] = [
@@ -45,7 +54,7 @@ const NAV_LINKS = [
 ]
 
 export default function PeoplePage() {
-  const { people, toggleTheme } = useStore()
+  const { people, projects, toggleTheme } = useStore()
   const { openPerson }          = useDialog()
   const [viewMode, setViewMode]     = useState<ViewMode>('card')
   const [deptFilter, setDeptFilter] = useState<DeptFilter>('All')
@@ -54,7 +63,8 @@ export default function PeoplePage() {
 
   const filtered = people.filter(p => {
     const deptMatch  = deptFilter === 'All' || getDept(p.role) === deptFilter
-    const utilMatch  = utilFilter === 'All' || getUtilStatus(p.utilizationPct, p.projects) === utilFilter
+    const alloc      = getActiveAlloc(p)
+    const utilMatch  = utilFilter === 'All' || getUtilStatus(alloc) === utilFilter
     const q          = searchQuery.toLowerCase()
     const searchMatch = q === '' ||
       p.name.toLowerCase().includes(q) ||
@@ -63,9 +73,11 @@ export default function PeoplePage() {
     return deptMatch && utilMatch && searchMatch
   })
 
-  const avgUtil     = Math.round(people.reduce((s, p) => s + p.utilizationPct, 0) / people.length)
-  const benchCount  = people.filter(p => !p.projects || p.projects.length === 0).length
-  const overCount   = people.filter(p => p.utilizationPct > 100).length
+  const avgUtil    = people.length > 0
+    ? Math.round(people.reduce((s, p) => s + getActiveAlloc(p), 0) / people.length)
+    : 0
+  const benchCount = people.filter(p => getActiveAlloc(p) === 0).length
+  const overCount  = people.filter(p => getActiveAlloc(p) > 100).length
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-secondary)' }}>
@@ -224,7 +236,7 @@ export default function PeoplePage() {
               </div>
             ) : (
               <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-                {filtered.map(p => <PersonCard key={p.id} person={p} onOpen={() => openPerson(p.id)} />)}
+                {filtered.map(p => <PersonCard key={p.id} person={p} projects={projects} onOpen={() => openPerson(p.id)} />)}
               </div>
             )
           ) : (
@@ -251,7 +263,7 @@ export default function PeoplePage() {
                   No people match the selected filters.
                 </div>
               ) : (
-                filtered.map(p => <PersonRow key={p.id} person={p} onOpen={() => openPerson(p.id)} />)
+                filtered.map(p => <PersonRow key={p.id} person={p} projects={projects} onOpen={() => openPerson(p.id)} />)
               )}
             </div>
           )}

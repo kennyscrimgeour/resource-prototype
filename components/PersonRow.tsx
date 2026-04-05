@@ -1,11 +1,16 @@
 import Avatar from '@/components/ui/Avatar'
 import Badge from '@/components/ui/Badge'
 import type { Person, Skill } from '@/data/people'
+import type { Project } from '@/data/projects'
 
 export type { Person, Skill }
 
+const _d = new Date()
+const TODAY_ISO = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`
+
 interface PersonRowProps {
-  person: Person
+  person:      Person
+  projects?:   Project[]
   showDayRate?: boolean
   onAction?: (person: Person) => void
   onOpen?: () => void
@@ -92,10 +97,14 @@ function AvailLabel({ from }: { from?: string }) {
 
 // ── PersonRow ─────────────────────────────────────────────────────────────────
 
-export default function PersonRow({ person, showDayRate = false, onAction, onOpen }: PersonRowProps) {
-  const isUnallocated = !person.projects || person.projects.length === 0
-  const primaryProject = person.projects?.[0]
-  const extraProjects = Math.max(0, (person.projects?.length ?? 0) - 1)
+export default function PersonRow({ person, projects = [], showDayRate = false, onAction, onOpen }: PersonRowProps) {
+  const activeAssignments = person.assignments.filter(a => a.endDate >= TODAY_ISO)
+  const totalAlloc        = activeAssignments.reduce((sum, a) => sum + a.allocationPct, 0)
+  const isUnallocated     = totalAlloc === 0
+  const primaryProject    = activeAssignments[0]
+    ? (projects.find(p => p.id === activeAssignments[0].projectId)?.name ?? activeAssignments[0].projectId)
+    : undefined
+  const extraProjects = Math.max(0, activeAssignments.length - 1)
 
   return (
     <div
@@ -142,7 +151,7 @@ export default function PersonRow({ person, showDayRate = false, onAction, onOpe
 
       {/* Utilization — 100px */}
       <div className="w-[100px] flex-shrink-0">
-        <UtilBar pct={person.utilizationPct} />
+        <UtilBar pct={totalAlloc} />
       </div>
 
       {/* Project — flex-1 */}

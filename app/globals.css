@@ -111,6 +111,11 @@
   --success-text:   #007a55;
   --success-border: #5ee9b5;
 
+  /* System — Info */
+  --info-bg:        #f0f9ff;
+  --info-text:      #0369a1;
+  --info-border:    #bae6fd;
+
   /* System — Warning */
   --warning-bg:     #fffbeb;
   --warning-text:   #b45309;
@@ -172,6 +177,10 @@ html.dark {
   --success-bg:     #004f3b;
   --success-text:   #5ee9b5;
   --success-border: #00d492;
+
+  --info-bg:        #0c2d48;
+  --info-text:      #7dd3fc;
+  --info-border:    #0ea5e9;
 
   --warning-bg:     #78350f;
   --warning-text:   #fcd34d;

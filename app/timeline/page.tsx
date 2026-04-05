@@ -395,7 +395,7 @@ export default function TimelinePage() {
               )
             })}
 
-            {/* Today vertical line — spans full body height */}
+            {/* Today vertical line — spans full body height, dashed */}
             <div
               style={{
                 position: 'absolute',
@@ -403,11 +403,10 @@ export default function TimelinePage() {
                 top: HEADER_HEIGHT,
                 bottom: 0,
                 width: 2,
-                backgroundColor: 'var(--brand-primary)',
-                opacity: 0.8,
+                background: 'repeating-linear-gradient(to bottom, var(--brand-primary) 0px, var(--brand-primary) 4px, transparent 4px, transparent 8px)',
+                opacity: 0.9,
                 zIndex: 5,
                 pointerEvents: 'none',
-                borderRadius: 1,
               }}
             />
           </div>

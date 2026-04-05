@@ -1,44 +1,43 @@
 import Avatar from '@/components/ui/Avatar'
-import { projects as allProjects } from '@/data/projects'
 import type { Person } from '@/data/people'
+import type { Project } from '@/data/projects'
+
+// ── Today ────────────────────────────────────────────────────────────────────
+
+const d = new Date()
+const TODAY_ISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 // ── Status logic ──────────────────────────────────────────────────────────────
 
-type CardStatus = 'Available' | 'Allocated' | 'Overloaded' | 'Bench'
+type CardStatus = 'Available' | 'Allocated' | 'Over-allocated' | 'On Bench'
 
-function getStatus(person: Person): CardStatus {
-  if (!person.projects || person.projects.length === 0) return 'Bench'
-  if (person.utilizationPct > 100) return 'Overloaded'
-  if (person.utilizationPct < 80)  return 'Available'
-  return 'Allocated'
+function getStatus(totalAlloc: number): CardStatus {
+  if (totalAlloc > 100) return 'Over-allocated'
+  if (totalAlloc === 100) return 'Allocated'
+  if (totalAlloc > 0) return 'Available'
+  return 'On Bench'
 }
 
 // ── Badge styles per status ───────────────────────────────────────────────────
 
 const STATUS_BADGE: Record<CardStatus, { bg: string; border: string; color: string }> = {
-  Available:  { bg: 'var(--success-bg)',    border: 'var(--success-border)',  color: 'var(--success-text)'  },
-  Allocated:  { bg: 'var(--brand-tertiary)',border: 'var(--brand-secondary)', color: 'var(--text-brand)'    },
-  Overloaded: { bg: 'var(--error-bg)',      border: 'var(--error-border)',    color: 'var(--error-text)'    },
-  Bench:      { bg: 'var(--warning-bg)',    border: 'var(--warning-border)',  color: 'var(--warning-text)'  },
+  'Available':      { bg: 'var(--success-bg)',     border: 'var(--success-border)',  color: 'var(--success-text)'  },
+  'Allocated':      { bg: 'var(--brand-tertiary)',  border: 'var(--brand-secondary)', color: 'var(--text-brand)'    },
+  'Over-allocated': { bg: 'var(--error-bg)',        border: 'var(--error-border)',    color: 'var(--error-text)'    },
+  'On Bench':       { bg: 'var(--warning-bg)',      border: 'var(--warning-border)',  color: 'var(--warning-text)'  },
 }
 
-// ── Segment colour palette (normal utilisation, cycling per project) ───────────
+const STATUS_LABEL: Record<CardStatus, string> = {
+  'Available':      'Available',
+  'Allocated':      'Allocated',
+  'Over-allocated': 'Over-allocated',
+  'On Bench':       'On Bench',
+}
 
-const SEGMENT_COLORS = [
-  '#06b6d4', // cyan  — project 1
-  '#8b5cf6', // violet — project 2
-  '#f97316', // orange — project 3
-  '#10b981', // emerald — project 4
-]
+// ── Segment colour palette ────────────────────────────────────────────────────
 
-// Overloaded uses two red shades
+const SEGMENT_COLORS = ['#06b6d4', '#8b5cf6', '#f97316', '#10b981']
 const OVERLOAD_COLORS = ['#ef4444', '#b91c1c']
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getClient(projectName: string): string {
-  return allProjects.find(p => p.name === projectName)?.client ?? ''
-}
 
 // ── Segmented allocation bar ──────────────────────────────────────────────────
 
@@ -48,14 +47,8 @@ function AllocBar({ segments }: { segments: Segment[] }) {
   return (
     <div
       style={{
-        display: 'flex',
-        gap: 2,
-        height: 8,
-        borderRadius: 2,
-        backgroundColor: '#e4e4e6',
-        overflow: 'hidden',
-        width: '100%',
-        flexShrink: 0,
+        display: 'flex', gap: 2, height: 8, borderRadius: 2,
+        backgroundColor: '#e4e4e6', overflow: 'hidden', width: '100%', flexShrink: 0,
       }}
     >
       {segments.map((seg, i) => (
@@ -80,25 +73,39 @@ function AllocBar({ segments }: { segments: Segment[] }) {
 
 // ── PersonCard ────────────────────────────────────────────────────────────────
 
-export default function PersonCard({ person, onOpen }: { person: Person; onOpen?: () => void }) {
-  const status       = getStatus(person)
+interface PersonCardProps {
+  person:   Person
+  projects: Project[]
+  onOpen?:  () => void
+}
+
+export default function PersonCard({ person, projects, onOpen }: PersonCardProps) {
+  // Derive active assignments (not rolled off) from the source-of-truth assignments array
+  const activeAssignments = person.assignments.filter(a => a.endDate >= TODAY_ISO)
+
+  // Total allocation across all active projects
+  const totalAlloc = activeAssignments.reduce((sum, a) => sum + a.allocationPct, 0)
+
+  const status       = getStatus(totalAlloc)
   const badge        = STATUS_BADGE[status]
-  const projectList  = person.projects ?? []
-  const isOverloaded = status === 'Overloaded'
-  const isBench      = status === 'Bench'
+  const isOverloaded = status === 'Over-allocated'
+  const isBench      = status === 'On Bench'
   const isAvailable  = status === 'Available'
 
-  // Distribute utilisation evenly across projects
-  const perProjectPct = projectList.length > 0
-    ? Math.round(person.utilizationPct / projectList.length)
-    : 0
+  // Resolve project name + client for each active assignment
+  const activeRows = activeAssignments.map((asgn, i) => {
+    const proj = projects.find(p => p.id === asgn.projectId)
+    return { asgn, name: proj?.name ?? asgn.projectId, client: proj?.client ?? '', colorIdx: i }
+  })
 
-  // Build bar segments
-  const segments: Segment[] = isOverloaded
-    ? projectList.map((_, i) => ({ color: OVERLOAD_COLORS[i % OVERLOAD_COLORS.length], pct: perProjectPct }))
-    : projectList.map((_, i) => ({ color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],   pct: perProjectPct }))
+  // Build bar segments — each assignment gets a segment proportional to its allocationPct
+  const segments: Segment[] = activeRows.map(({ asgn, colorIdx }) => ({
+    color: isOverloaded
+      ? OVERLOAD_COLORS[colorIdx % OVERLOAD_COLORS.length]
+      : SEGMENT_COLORS[colorIdx % SEGMENT_COLORS.length],
+    pct: asgn.allocationPct,
+  }))
 
-  // % label colour per project row
   function pctColor(i: number): string {
     if (isBench)      return 'var(--warning-text)'
     if (isOverloaded) return 'var(--error-text)'
@@ -130,7 +137,7 @@ export default function PersonCard({ person, onOpen }: { person: Person; onOpen?
           color: badge.color,
         }}
       >
-        {isOverloaded ? `${person.utilizationPct}%` : status === 'Bench' ? 'On Bench' : status}
+        {STATUS_LABEL[status]}
       </div>
 
       {/* Header: avatar + name + role */}
@@ -200,18 +207,18 @@ export default function PersonCard({ person, onOpen }: { person: Person; onOpen?
             <span className="font-medium" style={{ color: 'var(--warning-text)' }}>0%</span>
           </div>
         ) : (
-          projectList.map((projName, i) => (
-            <div key={projName} className="flex items-center justify-between gap-2 text-xs min-w-0">
+          activeRows.map(({ asgn, name, client, colorIdx }) => (
+            <div key={asgn.projectId} className="flex items-center justify-between gap-2 text-xs min-w-0">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-                  {projName}
+                  {name}
                 </span>
                 <span className="flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>
-                  {getClient(projName)}
+                  {client}
                 </span>
               </div>
-              <span className="font-bold flex-shrink-0" style={{ color: pctColor(i) }}>
-                {perProjectPct}%
+              <span className="font-bold flex-shrink-0" style={{ color: pctColor(colorIdx) }}>
+                {asgn.allocationPct}%
               </span>
             </div>
           ))

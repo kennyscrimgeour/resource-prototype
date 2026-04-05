@@ -91,7 +91,9 @@ export function computeProjectBudget(
 
       const asgnStart = new Date(asgn.startDate)
       const asgnEnd   = new Date(asgn.endDate)
-      const rate      = person.dayRate * (asgn.allocationPct / 100)
+      // Actual window uses the committed (locked) allocation; projected uses the current slider value
+      const actualRate     = person.dayRate * ((asgn.committedAllocationPct ?? asgn.allocationPct) / 100)
+      const projectedRate  = person.dayRate * (asgn.allocationPct / 100)
 
       // Actual: [asgnStart, min(asgnEnd, today))
       const actualEnd = asgnEnd < today ? asgnEnd : today
@@ -103,15 +105,15 @@ export function computeProjectBudget(
           const oEnd   = actualEnd  < phEnd  ? actualEnd  : phEnd
           if (oStart >= oEnd) continue
           const days = businessDaysBetween(oStart, oEnd)
-          phaseSpend[phase] += Math.round(rate * days)
+          phaseSpend[phase] += Math.round(actualRate * days)
         }
-        resourceActual += Math.round(rate * businessDaysBetween(asgnStart, actualEnd))
+        resourceActual += Math.round(actualRate * businessDaysBetween(asgnStart, actualEnd))
       }
 
       // Projected: [max(asgnStart, today), asgnEnd)
       const projStart = asgnStart > today ? asgnStart : today
       if (projStart < asgnEnd) {
-        resourceProjected += Math.round(rate * businessDaysBetween(projStart, asgnEnd))
+        resourceProjected += Math.round(projectedRate * businessDaysBetween(projStart, asgnEnd))
       }
     }
   }
