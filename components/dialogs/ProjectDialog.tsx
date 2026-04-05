@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { useStore } from '@/lib/store'
 import type { Project } from '@/data/projects'
 import type { Assignment, Person } from '@/data/people'
-import { computeProjectBudget, businessDaysBetween } from '@/lib/budget'
+import { computeProjectBudget, businessDaysBetween, getPhaseDateRanges } from '@/lib/budget'
 import Avatar from '@/components/ui/Avatar'
 import Badge from '@/components/ui/Badge'
 import BudgetBar from '@/components/ui/BudgetBar'
@@ -82,6 +82,82 @@ function getMonthMarkers(startISO: string, endISO: string, projDays: number) {
   return markers
 }
 
+// ── Ghost contributors ─────────────────────────────────────────────────────────
+
+interface GhostRow {
+  id:            string
+  initials:      string
+  name:          string
+  role:          string
+  startDate:     string
+  endDate:       string
+  allocationPct: number
+  cost:          number
+}
+
+function toISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function generateGhostRows(project: Project, today: Date): GhostRow[] {
+  if (project.phase !== 'Build' && project.phase !== 'UAT') return []
+
+  const ranges = getPhaseDateRanges(project)
+  const ghosts: GhostRow[] = []
+
+  // Ghost 1 — Strategist covering Discovery phase
+  const dEnd = ranges.Discovery.end
+  if (dEnd < today) {
+    const days = businessDaysBetween(ranges.Discovery.start, dEnd)
+    ghosts.push({
+      id: 'ghost-strategist',
+      initials: 'GS',
+      name: 'Strategy Lead',
+      role: 'Strategist',
+      startDate: project.startDate,
+      endDate:   toISO(dEnd),
+      allocationPct: 100,
+      cost: Math.round(580 * days),
+    })
+  }
+
+  // Ghost 2 — UX Designer covering Design phase
+  const dsEnd = ranges.Design.end
+  if (dsEnd < today) {
+    const days = businessDaysBetween(ranges.Design.start, dsEnd)
+    ghosts.push({
+      id: 'ghost-designer',
+      initials: 'GD',
+      name: 'Design Lead',
+      role: 'UX Designer',
+      startDate: toISO(ranges.Design.start),
+      endDate:   toISO(dsEnd),
+      allocationPct: 80,
+      cost: Math.round(620 * 0.8 * days),
+    })
+  }
+
+  // Ghost 3 — Business Analyst covering Build phase (UAT projects only)
+  if (project.phase === 'UAT') {
+    const bEnd = ranges.Build.end
+    if (bEnd < today) {
+      const days = businessDaysBetween(ranges.Build.start, bEnd)
+      ghosts.push({
+        id: 'ghost-ba',
+        initials: 'GB',
+        name: 'Business Analyst',
+        role: 'Business Analyst',
+        startDate: toISO(ranges.Build.start),
+        endDate:   toISO(bEnd),
+        allocationPct: 60,
+        cost: Math.round(560 * 0.6 * days),
+      })
+    }
+  }
+
+  return ghosts
+}
+
 function snapshotDraft(people: Person[], projectId: string): DraftAssignment[] {
   return people.flatMap(p =>
     p.assignments.filter(a => a.projectId === projectId).map(a => ({ personId: p.id, assignment: { ...a } }))
@@ -104,7 +180,7 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error'> = {
 
 // ── Shared row styles — grid: avatar | person | alloc | mini-gantt | dates | remove ──
 
-const COLS = '32px 1fr 56px 2fr 120px 36px'
+const COLS = '32px 1fr 120px 2fr 120px 36px'
 
 const ROW: React.CSSProperties = {
   display: 'grid',
@@ -156,7 +232,7 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
   const removedCount = committed.filter(c => !draft.some(d => d.personId === c.personId)).length
   const changeCount  = addedCount + removedCount
 
-  const [showLedger, setShowLedger] = useState(false)
+  const [showLedger, setShowLedger] = useState(true)
 
   // ── isAdding state ────────────────────────────────────────────────────────────
   const [isAdding,         setIsAdding]         = useState(false)
@@ -312,6 +388,12 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
   const draftRows = allDraftRows.filter(r => r.assignment.endDate >= todayISO)
   const pastRows  = allDraftRows.filter(r => r.assignment.endDate <  todayISO)
 
+  // Ghost past contributors — only shown when no real past rows exist
+  const ghostRows = useMemo(() =>
+    pastRows.length === 0 ? generateGhostRows(project, new Date(todayISO)) : [],
+    [pastRows.length, project, todayISO]
+  )
+
   // ── Keyboard ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     function handler(e: KeyboardEvent) {
@@ -329,6 +411,11 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
   }
   function handleDraftRemove(personId: string) {
     setDraft(prev => prev.filter(d => d.personId !== personId))
+  }
+  function handleDraftUpdateAllocation(personId: string, allocationPct: number) {
+    setDraft(prev => prev.map(d =>
+      d.personId === personId ? { ...d, assignment: { ...d.assignment, allocationPct } } : d
+    ))
   }
 
   // ── Apply / Cancel ────────────────────────────────────────────────────────────
@@ -368,7 +455,7 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
       <div style={{ position: 'fixed', inset: 0, zIndex: 51, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
         <div
           style={{
-            width: '100%', maxWidth: 920, maxHeight: '90vh',
+            width: '100%', maxWidth: 1140, maxHeight: '75vh',
             backgroundColor: 'var(--bg-primary)',
             border: '1px solid var(--border-primary)',
             borderRadius: 16,
@@ -435,14 +522,23 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Team</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: draftRows.length > project.capacity ? 'var(--error-text)' : 'var(--text-primary)' }}>
-                {draftRows.length} / {project.capacity} allocated
-              </span>
-              <div style={{ display: 'flex' }}>
-                {draftRows.slice(0, 7).map(({ person }, i) => (
-                  <Avatar key={person.id} initials={person.initials} size="xs" colorIndex={person.colorIndex ?? i}
-                    style={{ marginLeft: i > 0 ? -6 : 0, zIndex: 7 - i, outline: '2px solid var(--bg-primary)' }} />
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                {draftRows.slice(0, 8).map(({ person }, i) => (
+                  <Avatar key={person.id} initials={person.initials} size="sm" colorIndex={person.colorIndex ?? i}
+                    style={{ marginLeft: i > 0 ? -8 : 0, zIndex: 8 - i, outline: '2px solid var(--bg-primary)' }} />
                 ))}
+                {draftRows.length > 8 && (
+                  <div style={{
+                    marginLeft: -8, zIndex: 0,
+                    width: 28, height: 28, borderRadius: '50%',
+                    backgroundColor: 'var(--bg-tertiary)', border: '2px solid var(--bg-primary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)',
+                  }}>+{draftRows.length - 8}</div>
+                )}
+                {draftRows.length === 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>No team yet</span>
+                )}
               </div>
             </div>
           </div>
@@ -528,11 +624,23 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
                   )}
 
                   {addPerson ? (
-                    <input
-                      type="number" min={10} max={200} step={5} value={addAllocationPct}
-                      onChange={e => setAddAllocationPct(Number(e.target.value))}
-                      style={{ width: '100%', height: 22, fontSize: 11, fontWeight: 600, border: '1px solid var(--border-primary)', borderRadius: 4, backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', padding: '0 6px', outline: 'none', boxSizing: 'border-box' }}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <input
+                        type="range"
+                        min={5} max={100} step={5}
+                        value={addAllocationPct}
+                        onChange={e => setAddAllocationPct(Number(e.target.value))}
+                        className="alloc-slider"
+                        style={{
+                          flex: 1, minWidth: 0,
+                          '--slider-pct': `${((addAllocationPct - 5) / 95) * 100}%`,
+                          '--slider-fill': barColor,
+                        } as React.CSSProperties}
+                      />
+                      <span style={{ fontSize: 11, fontWeight: 700, minWidth: 28, textAlign: 'right', flexShrink: 0, color: 'var(--text-secondary)' }}>
+                        {addAllocationPct}%
+                      </span>
+                    </div>
                   ) : <div />}
 
                   {/* Adding row gantt preview */}
@@ -578,6 +686,12 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
                 const leftHandleLocked = asgn.startDate <= todayISO
                 const fillColor = isNew ? 'var(--warning-text)' : barColor
 
+                // Overload: sum allocation on other active projects
+                const otherAlloc = person.assignments
+                  .filter(a => a.projectId !== project.id && a.endDate >= todayISO)
+                  .reduce((sum, a) => sum + a.allocationPct, 0)
+                const isOverloaded = otherAlloc + asgn.allocationPct > 100
+
                 return (
                   <div
                     key={person.id}
@@ -586,16 +700,43 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
                     <Avatar initials={person.initials} size="xs" colorIndex={person.colorIndex ?? 0} />
 
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>{person.name}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0, minWidth: 0 }}>{person.name}</p>
                         {isNew && (
                           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warning-text)', backgroundColor: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase', flexShrink: 0 }}>Draft</span>
+                        )}
+                        {isOverloaded && (
+                          <span
+                            title={`${otherAlloc}% on other projects + ${asgn.allocationPct}% here = ${otherAlloc + asgn.allocationPct}%`}
+                            style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--error-text)', backgroundColor: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase', flexShrink: 0, cursor: 'help' }}
+                          >
+                            Overloaded
+                          </span>
                         )}
                       </div>
                       <p style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>{person.role}</p>
                     </div>
 
-                    <Badge variant={asgn.allocationPct > 100 ? 'error' : 'default'} size="sm">{asgn.allocationPct}%</Badge>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <input
+                        type="range"
+                        min={5} max={100} step={5}
+                        value={Math.min(asgn.allocationPct, 100)}
+                        onChange={e => handleDraftUpdateAllocation(person.id, Number(e.target.value))}
+                        className="alloc-slider"
+                        style={{
+                          flex: 1, minWidth: 0,
+                          '--slider-pct': `${((Math.min(asgn.allocationPct, 100) - 5) / 95) * 100}%`,
+                          '--slider-fill': isOverloaded ? 'var(--error-text)' : fillColor,
+                        } as React.CSSProperties}
+                      />
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, minWidth: 28, textAlign: 'right', flexShrink: 0,
+                        color: isOverloaded ? 'var(--error-text)' : 'var(--text-secondary)',
+                      }}>
+                        {asgn.allocationPct}%
+                      </span>
+                    </div>
 
                     {/* ── Mini-Gantt bar ────────────────────────────────── */}
                     <div
@@ -639,7 +780,7 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
               })}
 
               {/* ── Historical Ledger ─────────────────────────────────── */}
-              {pastRows.length > 0 && (
+              {(pastRows.length > 0 || ghostRows.length > 0) && (
                 <>
                   {/* Toggle row */}
                   <button
@@ -672,13 +813,44 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
                         fontSize: 10, fontWeight: 600, borderRadius: 4, padding: '1px 6px',
                         backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)',
                       }}>
-                        {pastRows.length}
+                        {pastRows.length + ghostRows.length}
                       </span>
                       <span style={{ fontSize: 10, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
                         £{budget.actualSpend.toLocaleString()} locked
                       </span>
                     </div>
                   </button>
+
+                  {/* Ghost rows — locked actuals for phases without named contributors */}
+                  {showLedger && ghostRows.map(ghost => {
+                    const { leftPct, widthPct } = ganttBar(ghost.startDate, ghost.endDate)
+                    return (
+                      <div key={ghost.id} style={{ ...ROW, opacity: 0.6 }}>
+                        <Avatar initials={ghost.initials} size="xs" colorIndex={3} />
+
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>{ghost.name}</p>
+                          <p style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>{ghost.role}</p>
+                        </div>
+
+                        <Badge variant="default" size="sm">{ghost.allocationPct}%</Badge>
+
+                        <div style={{ position: 'relative', height: GANTT_H, borderRadius: 4, backgroundColor: 'var(--bg-tertiary)' }}>
+                          {monthMarkers.map(m => (
+                            <div key={m.leftPct} style={{ position: 'absolute', left: `${m.leftPct}%`, top: 0, bottom: 0, width: 1, backgroundColor: 'var(--border-secondary)', pointerEvents: 'none' }} />
+                          ))}
+                          <div style={{ position: 'absolute', left: `${leftPct}%`, width: `${widthPct}%`, top: 0, height: '100%', backgroundColor: '#16a34a', borderRadius: 4 }} />
+                        </div>
+
+                        <div>
+                          <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>{fmt(ghost.startDate)}</p>
+                          <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>→ {fmt(ghost.endDate)}</p>
+                        </div>
+
+                        <div style={{ ...ACTION_BTN, cursor: 'default', opacity: 0.4 }}>🔒</div>
+                      </div>
+                    )
+                  })}
 
                   {/* Ledger rows — read-only */}
                   {showLedger && pastRows.map(({ person, assignment: asgn }) => {

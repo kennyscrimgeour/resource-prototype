@@ -49,7 +49,7 @@ export const projects: Project[] = [
     dueDate: 'Due 30 Sep',
     allocated: 5,
     capacity: 6,
-    budgetTotal: 185000,
+    budgetTotal: 755000,
     historicalSpend: 28500,
     warningText: 'Burn rate 18% above forecast',
     team: [
@@ -73,7 +73,7 @@ export const projects: Project[] = [
     dueDate: 'Due 15 Aug',
     allocated: 2,
     capacity: 3,
-    budgetTotal: 75000,
+    budgetTotal: 290000,
     historicalSpend: 9200,
     warningText: null,
     team: [{ initials: 'TC', colorIndex: 2 }, { initials: 'PW', colorIndex: 1 }],
@@ -91,7 +91,7 @@ export const projects: Project[] = [
     dueDate: 'Due 12 Jun',
     allocated: 3,
     capacity: 4,
-    budgetTotal: 50000,
+    budgetTotal: 230000,
     historicalSpend: 7800,
     warningText: null,
     team: [
@@ -113,7 +113,7 @@ export const projects: Project[] = [
     dueDate: 'Due 28 Aug',
     allocated: 3,
     capacity: 4,
-    budgetTotal: 125000,
+    budgetTotal: 500000,
     historicalSpend: 42000,
     warningText: '14% over budget — escalate now',
     team: [
@@ -135,7 +135,7 @@ export const projects: Project[] = [
     dueDate: 'Due 3 Jul',
     allocated: 3,
     capacity: 4,
-    budgetTotal: 100000,
+    budgetTotal: 395000,
     historicalSpend: 38500,
     warningText: 'UAT delays risking go-live date',
     team: [
@@ -157,7 +157,7 @@ export const projects: Project[] = [
     dueDate: 'Due 19 Sep',
     allocated: 3,
     capacity: 4,
-    budgetTotal: 85000,
+    budgetTotal: 290000,
     historicalSpend: 6400,
     warningText: null,
     team: [
@@ -179,7 +179,7 @@ export const projects: Project[] = [
     dueDate: 'Due 25 Nov',
     allocated: 2,
     capacity: 4,
-    budgetTotal: 95000,
+    budgetTotal: 245000,
     historicalSpend: 4200,
     warningText: null,
     team: [
@@ -200,7 +200,7 @@ export const projects: Project[] = [
     dueDate: 'Due 11 Jul',
     allocated: 3,
     capacity: 3,
-    budgetTotal: 100000,
+    budgetTotal: 250000,
     historicalSpend: 21000,
     warningText: 'Senior dev overloaded — CJ on two projects',
     team: [
@@ -221,7 +221,7 @@ export const projects: Project[] = [
     dueDate: 'Due 30 Apr',
     allocated: 2,
     capacity: 2,
-    budgetTotal: 50000,
+    budgetTotal: 170000,
     historicalSpend: 16800,
     warningText: null,
     team: [
@@ -244,7 +244,7 @@ export const projects: Project[] = [
     dueDate: 'Starts 4 May',
     allocated: 0,
     capacity: 5,
-    budgetTotal: 110000,
+    budgetTotal: 165000,
     historicalSpend: 0,
     warningText: null,
     team: [],
@@ -262,7 +262,7 @@ export const projects: Project[] = [
     dueDate: 'Starts 8 Jun',
     allocated: 0,
     capacity: 6,
-    budgetTotal: 125000,
+    budgetTotal: 190000,
     historicalSpend: 0,
     warningText: null,
     team: [],

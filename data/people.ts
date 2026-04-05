@@ -165,7 +165,12 @@ export const people: Person[] = [
     projects: [],
     availableFrom: 'now',
     dayRate: 750,
-    assignments: [],
+    assignments: [
+      // Digital Banking — Design phase
+      { projectId: '1', startDate: '2026-02-07', endDate: '2026-03-31', allocationPct: 80 },
+      // Regulatory Reporting — full Discovery → Build run
+      { projectId: '9', startDate: '2025-11-17', endDate: '2026-03-28', allocationPct: 100 },
+    ],
   },
   {
     id: '10',
@@ -224,7 +229,7 @@ export const people: Person[] = [
     utilizationPct: 100,
     projects: ['Digital Banking Redesign', 'Advisory Portal v2'],
     availableFrom: '2026-09-30',
-    dayRate: 820,
+    dayRate: 800,
     assignments: [
       { projectId: '1', startDate: '2026-01-12', endDate: '2026-09-30', allocationPct: 50 },
       { projectId: '3', startDate: '2026-02-16', endDate: '2026-06-12', allocationPct: 50 },
@@ -240,7 +245,7 @@ export const people: Person[] = [
     utilizationPct: 80,
     projects: ['Equities Trade Dashboard'],
     availableFrom: '2026-08-28',
-    dayRate: 820,
+    dayRate: 800,
     assignments: [
       { projectId: '4', startDate: '2026-03-02', endDate: '2026-08-28', allocationPct: 80 },
       // Joining Digital Banking build phase from May
@@ -409,6 +414,46 @@ export const people: Person[] = [
       { projectId: '9', startDate: '2025-11-17', endDate: '2026-04-12', allocationPct: 50 },
       // Moves to Client Intelligence Hub
       { projectId: '6', startDate: '2026-04-13', endDate: '2026-09-19', allocationPct: 50 },
+    ],
+  },
+
+  // ── Historical contributors (Discovery / Design phase consultants) ─────────
+  {
+    id: '25',
+    name: 'Rachel Okafor',
+    initials: 'RO',
+    colorIndex: 4,
+    role: 'Strategy Consultant',
+    skills: [{ label: 'Discovery' }, { label: 'Stakeholder Mgmt' }, { label: 'Workshops' }],
+    utilizationPct: 0,
+    projects: [],
+    availableFrom: 'now',
+    dayRate: 650,
+    assignments: [
+      // Asset Management — Discovery
+      { projectId: '5', startDate: '2025-10-13', endDate: '2025-11-08', allocationPct: 100 },
+      // Equities Trade — Discovery
+      { projectId: '4', startDate: '2025-11-03', endDate: '2025-12-03', allocationPct: 100 },
+      // Digital Banking — Discovery
+      { projectId: '1', startDate: '2026-01-12', endDate: '2026-02-07', allocationPct: 100 },
+    ],
+  },
+  {
+    id: '26',
+    name: 'James Hargreaves',
+    initials: 'JH',
+    colorIndex: 6,
+    role: 'Lead Researcher',
+    skills: [{ label: 'UX Research' }, { label: 'Prototyping' }, { label: 'User Testing' }],
+    utilizationPct: 0,
+    projects: [],
+    availableFrom: 'now',
+    dayRate: 590,
+    assignments: [
+      // Asset Management — Design phase
+      { projectId: '5', startDate: '2025-11-08', endDate: '2025-12-31', allocationPct: 80 },
+      // Equities Trade — Design phase
+      { projectId: '4', startDate: '2025-12-03', endDate: '2026-02-01', allocationPct: 80 },
     ],
   },
 ]

@@ -188,6 +188,49 @@ html.dark {
   --budget-track: #3f3f46;   /* background/tertiary */
 }
 
+/* ── Allocation slider — custom two-color track ────────────────────────────── */
+input[type=range].alloc-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    var(--slider-fill) var(--slider-pct),
+    var(--bg-tertiary) var(--slider-pct)
+  );
+}
+
+input[type=range].alloc-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  border: 2.5px solid var(--slider-fill);
+  cursor: grab;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input[type=range].alloc-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--slider-fill) 20%, transparent);
+}
+
+input[type=range].alloc-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  border: 2.5px solid var(--slider-fill);
+  cursor: grab;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+}
+
 /* ── Base styles ───────────────────────────────────────────────────────────── */
 body {
   background-color: var(--bg-primary);
