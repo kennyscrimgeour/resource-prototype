@@ -103,8 +103,8 @@ export default function WeekHeader({ weeks, colWidth, todayCol }: WeekHeaderProp
                   style={{
                     fontSize: 9,
                     fontWeight: 600,
-                    color: '#fff',
-                    backgroundColor: 'var(--brand-primary)',
+                    color: 'var(--neutral-lightest, #fafafa)',
+                    backgroundColor: 'var(--neutral-darkest, #18181b)',
                     borderRadius: 4,
                     padding: '2px 6px',
                     whiteSpace: 'nowrap',

@@ -10,60 +10,53 @@ import TimelineStub, { STUB_WIDTH, ROW_HEIGHT } from '@/components/timeline/Time
 import WeekHeader, { HEADER_HEIGHT } from '@/components/timeline/WeekHeader'
 import { useStore } from '@/lib/store'
 import { useDialog } from '@/lib/useDialog'
+import type { Assignment } from '@/data/people'
 import { Bell } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const COL_W    = 76
-const BAR_H    = 28
+const COL_W = 76
+const BAR_H = 28
 
 // ── Project → colour token ────────────────────────────────────────────────────
 const PROJECT_COLORS: Record<string, string> = {
-  '1':  '#06b6d4',   // Digital Banking Redesign     → cyan
-  '2':  '#10b981',   // Carbon Tracker Platform       → emerald
-  '3':  '#8b5cf6',   // Advisory Portal v2            → violet
-  '4':  '#f97316',   // Equities Trade Dashboard      → orange
-  '5':  '#06b6d4',   // Asset Management System       → cyan
-  '6':  '#8b5cf6',   // Client Intelligence Hub       → violet
-  '7':  '#10b981',   // Compliance Tooling Suite      → emerald
-  '8':  '#f97316',   // Field Operations App          → orange
-  '9':  '#06b6d4',   // Regulatory Reporting Suite    → cyan
-  '10': '#8b5cf6',   // Trade Analytics Portal        → violet
-  '11': '#10b981',   // Digital Onboarding Platform   → emerald
+  '1':  '#06b6d4', '2':  '#10b981', '3':  '#8b5cf6', '4':  '#f97316',
+  '5':  '#06b6d4', '6':  '#8b5cf6', '7':  '#10b981', '8':  '#f97316',
+  '9':  '#06b6d4', '10': '#8b5cf6', '11': '#10b981',
+}
+
+// ── Draft type ────────────────────────────────────────────────────────────────
+interface DraftChange {
+  personId:  string
+  projectId: string
+  startDate: string
+  endDate:   string
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function getMonday(d: Date): Date {
-  const result = new Date(d)
-  result.setHours(0, 0, 0, 0)
+  const result = new Date(d); result.setHours(0, 0, 0, 0)
   const day = result.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  result.setDate(result.getDate() + diff)
+  result.setDate(result.getDate() + (day === 0 ? -6 : 1 - day))
   return result
 }
 
 function generateWeeks(startISO: string, endISO: string): Date[] {
   const weeks: Date[] = []
   let current = getMonday(new Date(startISO))
-  const end = getMonday(new Date(endISO))
+  const end   = getMonday(new Date(endISO))
   while (current <= end) {
     weeks.push(new Date(current))
-    current = new Date(current)
-    current.setDate(current.getDate() + 7)
+    current = new Date(current); current.setDate(current.getDate() + 7)
   }
   return weeks
 }
 
-function parseLocal(isoDate: string): Date {
-  const [y, m, d] = isoDate.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-
 function getColIndex(weeks: Date[], isoDate: string): number {
-  const target = parseLocal(isoDate)
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const target = new Date(y, m - 1, d)
   let idx = 0
   for (let i = 0; i < weeks.length; i++) {
-    if (weeks[i] <= target) idx = i
-    else break
+    if (weeks[i] <= target) idx = i; else break
   }
   return idx
 }
@@ -71,7 +64,6 @@ function getColIndex(weeks: Date[], isoDate: string): number {
 // ── Dept filter ───────────────────────────────────────────────────────────────
 type DeptFilter = 'All' | 'Design' | 'Engineering' | 'Product' | 'Research' | 'Data'
 const DEPT_FILTERS: DeptFilter[] = ['All', 'Design', 'Engineering', 'Product', 'Research', 'Data']
-
 function getDept(role: string): DeptFilter {
   if (role.includes('Designer') || role.includes('Brand'))                                                       return 'Design'
   if (role.includes('Engineer') || role.includes('Developer') || role.includes('Dev') || role.includes('Lead')) return 'Engineering'
@@ -89,7 +81,6 @@ const NAV_LINKS = [
   { label: 'Timeline', href: '/timeline' },
 ]
 
-// ── HUD stat block ────────────────────────────────────────────────────────────
 function Stat({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
@@ -100,7 +91,6 @@ function Stat({ label, value, warn }: { label: string; value: number; warn?: boo
     </div>
   )
 }
-
 function HudDivider() {
   return <div style={{ width: 1, height: 24, backgroundColor: 'var(--border-primary)', flexShrink: 0 }} />
 }
@@ -108,30 +98,51 @@ function HudDivider() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function TimelinePage() {
   const { people, projects, toggleTheme, updateAssignment } = useStore()
-  const { openProject, openPerson }       = useDialog()
+  const { openProject, openPerson } = useDialog()
   const [deptFilter, setDeptFilter] = useState<DeptFilter>('All')
   const [viewMode]                  = useState<ViewMode>('Wk')
   const scrollRef                   = useRef<HTMLDivElement>(null)
 
-  const today = useMemo(() => {
-    const d = new Date()
-    d.setHours(0, 0, 0, 0)
-    return d
-  }, [])
+  // ── Draft state ───────────────────────────────────────────────────────────
+  // Map key: `${personId}:${projectId}`
+  const [drafts, setDrafts]       = useState<Map<string, DraftChange>>(new Map())
+  const isDraft                   = drafts.size > 0
 
-  // Use local date to avoid UTC-offset edge cases
+  function recordDraft(personId: string, projectId: string, startDate: string, endDate: string) {
+    setDrafts(prev => {
+      const next = new Map(prev)
+      next.set(`${personId}:${projectId}`, { personId, projectId, startDate, endDate })
+      return next
+    })
+  }
+
+  function applyDrafts() {
+    drafts.forEach(({ personId, projectId, startDate, endDate }) => {
+      updateAssignment(personId, projectId, { startDate, endDate })
+    })
+    setDrafts(new Map())
+  }
+
+  function discardDrafts() { setDrafts(new Map()) }
+
+  // ── Effective assignment (draft overlay) ──────────────────────────────────
+  function effectiveAssignment(personId: string, asgn: Assignment): Assignment {
+    const draft = drafts.get(`${personId}:${asgn.projectId}`)
+    return draft ? { ...asgn, startDate: draft.startDate, endDate: draft.endDate } : asgn
+  }
+
+  // ── Today ─────────────────────────────────────────────────────────────────
+  const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
   const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
-  // Timeline spans from the earliest project start through the end of 2026
   const weeks    = useMemo(() => generateWeeks('2025-10-06', '2026-12-28'), [])
   const todayCol = useMemo(() => getColIndex(weeks, todayISO), [weeks, todayISO])
 
   const filteredPeople = useMemo(
     () => people.filter(p => deptFilter === 'All' || getDept(p.role) === deptFilter),
-    [deptFilter],
+    [deptFilter, people],
   )
 
-  // Scroll to today on mount
   useEffect(() => {
     if (scrollRef.current && todayCol >= 0) {
       scrollRef.current.scrollLeft = Math.max(0, todayCol * COL_W - 300)
@@ -139,55 +150,50 @@ export default function TimelinePage() {
   }, [todayCol])
 
   // HUD stats
-  const onBenchCount     = people.filter(p => !p.projects || p.projects.length === 0).length
-  const overloadedCount  = people.filter(p => p.utilizationPct > 100).length
-  const activeProjects   = projects.filter(p => p.startDate <= todayISO && p.endDate >= todayISO).length
-  const pipelineCount    = projects.filter(p => p.startDate > todayISO).length
+  const onBenchCount    = people.filter(p => !p.assignments.some(a => a.endDate >= todayISO)).length
+  const overloadedCount = people.filter(p => {
+    const total = p.assignments.filter(a => a.endDate >= todayISO).reduce((s, a) => s + a.allocationPct, 0)
+    return total > 100
+  }).length
+  const activeProjects  = projects.filter(p => p.startDate <= todayISO && p.endDate >= todayISO).length
+  const pipelineCount   = projects.filter(p => p.startDate > todayISO).length
 
-  // Today line x — measured from left edge of the inner container
+  // Today line x
   const todayLineX = STUB_WIDTH + todayCol * COL_W + Math.floor(COL_W / 2)
 
+
   return (
-    <div
-      style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-secondary)' }}
-    >
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-secondary)' }}>
       <Sidebar activePage="timeline" />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
-        {/* ── Header bar ───────────────────────────────────────────────────── */}
-        <header
-          style={{
-            height: 60, flexShrink: 0,
-            backgroundColor: 'var(--bg-primary)',
-            borderBottom: '1px solid var(--border-primary)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            paddingLeft: 24, paddingRight: 24,
-          }}
-        >
+        {/* ── Header ───────────────────────────────────────────────────────── */}
+        <header style={{
+          height: 60, flexShrink: 0,
+          backgroundColor: 'var(--bg-primary)',
+          borderBottom: '1px solid var(--border-primary)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          paddingLeft: 24, paddingRight: 24,
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Timeline</span>
             <Badge variant="default" size="sm">{people.length} people</Badge>
+            {isDraft && (
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--info-text, #0369a1)', backgroundColor: 'var(--info-bg, #f0f9ff)', border: '1px solid var(--info-border, #bae6fd)', borderRadius: 4, padding: '2px 6px', textTransform: 'uppercase' }}>
+                Draft
+              </span>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 8, padding: 4, flexShrink: 0 }}>
             {NAV_LINKS.map(({ label, href }) => (
-              <Link
-                key={label}
-                href={href}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: 6,
-                  fontWeight: 500,
-                  fontSize: 14,
-                  textDecoration: 'none',
-                  ...(label === 'Timeline'
-                    ? { backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }
-                    : { color: 'var(--text-secondary)', border: '1px solid transparent' }),
-                }}
-              >
-                {label}
-              </Link>
+              <Link key={label} href={href} style={{
+                padding: '4px 12px', borderRadius: 6, fontWeight: 500, fontSize: 14, textDecoration: 'none',
+                ...(label === 'Timeline'
+                  ? { backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }
+                  : { color: 'var(--text-secondary)', border: '1px solid transparent' }),
+              }}>{label}</Link>
             ))}
           </div>
 
@@ -197,20 +203,13 @@ export default function TimelinePage() {
           </div>
         </header>
 
-        {/* ── HUD strip ────────────────────────────────────────────────────── */}
-        <div
-          style={{
-            height: 56, flexShrink: 0,
-            backgroundColor: 'var(--bg-primary)',
-            borderBottom: '1px solid var(--border-primary)',
-            display: 'flex', alignItems: 'center', gap: 20,
-            paddingLeft: 24, paddingRight: 24,
-          }}
-        >
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0 }}>
-            Resource Timeline
-          </h1>
-
+        {/* ── HUD ──────────────────────────────────────────────────────────── */}
+        <div style={{
+          height: 56, flexShrink: 0,
+          backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-primary)',
+          display: 'flex', alignItems: 'center', gap: 20, paddingLeft: 24, paddingRight: 24,
+        }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0 }}>Resource Timeline</h1>
           <HudDivider />
           <Stat label="Total People"    value={people.length} />
           <HudDivider />
@@ -224,85 +223,45 @@ export default function TimelinePage() {
         </div>
 
         {/* ── Filter bar ───────────────────────────────────────────────────── */}
-        <div
-          style={{
-            height: 44, flexShrink: 0,
-            backgroundColor: 'var(--bg-primary)',
-            borderBottom: '1px solid var(--border-primary)',
-            display: 'flex', alignItems: 'center', gap: 6,
-            paddingLeft: 24, paddingRight: 24,
-          }}
-        >
+        <div style={{
+          height: 44, flexShrink: 0,
+          backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-primary)',
+          display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 24, paddingRight: 24,
+        }}>
           {DEPT_FILTERS.map(f => (
             <button key={f} onClick={() => setDeptFilter(f)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
               <Badge variant={deptFilter === f ? 'brand' : 'default'} size="sm">{f}</Badge>
             </button>
           ))}
-
-          {/* Wk / Mo / Qtr toggle */}
-          <div
-            style={{
-              marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2,
-              backgroundColor: 'var(--bg-secondary)', borderRadius: 6, padding: 2,
-            }}
-          >
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2, backgroundColor: 'var(--bg-secondary)', borderRadius: 6, padding: 2 }}>
             {(['Wk', 'Mo', 'Qtr'] as ViewMode[]).map(v => (
-              <div
-                key={v}
-                style={{
-                  width: 40, height: 24, borderRadius: 4,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: v === viewMode ? 600 : 400,
-                  color: v === viewMode ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                  backgroundColor: v === viewMode ? 'var(--bg-primary)' : 'transparent',
-                  boxShadow: v === viewMode ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                  cursor: v === 'Wk' ? 'default' : 'not-allowed',
-                  opacity: v !== 'Wk' ? 0.5 : 1,
-                }}
-              >
-                {v}
-              </div>
+              <div key={v} style={{
+                width: 40, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: v === viewMode ? 600 : 400,
+                color: v === viewMode ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                backgroundColor: v === viewMode ? 'var(--bg-primary)' : 'transparent',
+                boxShadow: v === viewMode ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                cursor: v === 'Wk' ? 'default' : 'not-allowed',
+                opacity: v !== 'Wk' ? 0.5 : 1,
+              }}>{v}</div>
             ))}
           </div>
         </div>
 
         {/* ── Timeline grid ────────────────────────────────────────────────── */}
-        <div
-          ref={scrollRef}
-          style={{ flex: 1, overflow: 'auto', position: 'relative' }}
-        >
-          <div
-            style={{
-              position: 'relative',
-              width: STUB_WIDTH + weeks.length * COL_W,
-            }}
-          >
+        <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
+          <div style={{ position: 'relative', width: STUB_WIDTH + weeks.length * COL_W }}>
 
-            {/* Sticky header row */}
-            <div
-              style={{
-                position: 'sticky', top: 0, zIndex: 20,
-                display: 'flex', height: HEADER_HEIGHT,
-              }}
-            >
-              {/* Corner cell — sticky on both axes */}
-              <div
-                style={{
-                  position: 'sticky', left: 0, zIndex: 30,
-                  width: STUB_WIDTH, flexShrink: 0,
-                  height: HEADER_HEIGHT,
-                  backgroundColor: 'var(--bg-primary)',
-                  borderRight: '1px solid var(--border-tertiary)',
-                  borderBottom: '1px solid var(--border-tertiary)',
-                  display: 'flex', alignItems: 'flex-end',
-                  paddingLeft: 12, paddingBottom: 8,
-                }}
-              >
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  People
-                </span>
+            {/* Sticky week header */}
+            <div style={{ position: 'sticky', top: 0, zIndex: 20, display: 'flex', height: HEADER_HEIGHT }}>
+              <div style={{
+                position: 'sticky', left: 0, zIndex: 30, width: STUB_WIDTH, flexShrink: 0,
+                height: HEADER_HEIGHT, backgroundColor: 'var(--bg-primary)',
+                borderRight: '1px solid var(--border-tertiary)', borderBottom: '1px solid var(--border-tertiary)',
+                display: 'flex', alignItems: 'flex-end', paddingLeft: 12, paddingBottom: 8,
+              }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>People</span>
               </div>
-
               <WeekHeader weeks={weeks} colWidth={COL_W} todayCol={todayCol} />
             </div>
 
@@ -320,71 +279,56 @@ export default function TimelinePage() {
                     onClick={() => openPerson(person.id)}
                   >
                     <TimelineStub
-                      name={person.name}
-                      role={person.role}
-                      initials={person.initials}
-                      colorIndex={person.colorIndex ?? 0}
+                      name={person.name} role={person.role}
+                      initials={person.initials} colorIndex={person.colorIndex ?? 0}
                       rowCount={rowCount}
                     />
                   </div>
 
                   {/* Bars area */}
-                  <div
-                    style={{
-                      position: 'relative',
-                      flex: 1,
-                      height: totalH,
-                      backgroundColor: 'var(--bg-primary)',
-                      borderBottom: '1px solid var(--border-tertiary)',
-                      // Vertical grid lines via CSS — one per column, no extra DOM nodes
-                      backgroundImage: `repeating-linear-gradient(to right, transparent 0px, transparent ${COL_W - 1}px, var(--border-tertiary) ${COL_W - 1}px, var(--border-tertiary) ${COL_W}px)`,
-                    }}
-                  >
-                    {/* Sub-row dividers when person has multiple assignments */}
+                  <div style={{
+                    position: 'relative', flex: 1, height: totalH,
+                    backgroundColor: 'var(--bg-primary)',
+                    borderBottom: '1px solid var(--border-tertiary)',
+                    backgroundImage: `repeating-linear-gradient(to right, transparent 0px, transparent ${COL_W - 1}px, var(--border-tertiary) ${COL_W - 1}px, var(--border-tertiary) ${COL_W}px)`,
+                  }}>
                     {rowCount > 1 && Array.from({ length: rowCount - 1 }).map((_, ri) => (
-                      <div
-                        key={ri}
-                        style={{
-                          position: 'absolute', left: 0, right: 0,
-                          top: (ri + 1) * ROW_HEIGHT - 1,
-                          height: 1,
-                          backgroundColor: 'var(--border-tertiary)',
-                          opacity: 0.5,
-                          pointerEvents: 'none',
-                        }}
-                      />
+                      <div key={ri} style={{
+                        position: 'absolute', left: 0, right: 0, top: (ri + 1) * ROW_HEIGHT - 1,
+                        height: 1, backgroundColor: 'var(--border-tertiary)', opacity: 0.5, pointerEvents: 'none',
+                      }} />
                     ))}
 
-                    {/* Assignment bars */}
-                    {person.assignments.map((a, ri) => {
-                      const startCol = Math.max(0, getColIndex(weeks, a.startDate))
-                      const endCol   = Math.min(weeks.length - 1, getColIndex(weeks, a.endDate))
+                    {person.assignments.map((rawAsgn, ri) => {
+                      const asgn     = effectiveAssignment(person.id, rawAsgn)
+                      const startCol = Math.max(0, getColIndex(weeks, asgn.startDate))
+                      const endCol   = Math.min(weeks.length - 1, getColIndex(weeks, asgn.endDate))
                       const barLeft  = startCol * COL_W + 4
                       const barWidth = Math.max(8, (endCol - startCol + 1) * COL_W - 8)
                       const barTop   = ri * ROW_HEIGHT + Math.floor((ROW_HEIGHT - BAR_H) / 2)
-                      const proj     = projects.find(p => p.id === a.projectId)
+                      const proj     = projects.find(p => p.id === asgn.projectId)
                       if (!proj) return null
 
+                      const isDraftBar = drafts.has(`${person.id}:${asgn.projectId}`)
+                      const color      = PROJECT_COLORS[asgn.projectId] ?? '#06b6d4'
+
                       return (
-                        <div
-                          key={`${a.projectId}-${a.startDate}`}
-                          style={{ position: 'absolute', left: barLeft, top: barTop }}
-                        >
+                        <div key={`${asgn.projectId}-${rawAsgn.startDate}`} style={{ position: 'absolute', left: barLeft, top: barTop }}>
                           <TimelineBar
                             projectName={proj.name}
                             client={proj.client}
-                            color={PROJECT_COLORS[a.projectId] ?? '#06b6d4'}
+                            color={isDraftBar ? '#3b82f6' : color}
                             width={barWidth}
-                            dayRate={person.dayRate}
-                            allocationPct={a.allocationPct}
+                            dayRate={person.dayRate ?? 0}
+                            allocationPct={asgn.allocationPct}
                             startCol={startCol}
                             endCol={endCol}
                             colWidth={COL_W}
                             weeks={weeks}
                             todayCol={todayCol}
-                            onBarClick={() => openProject(a.projectId)}
+                            onBarClick={() => openProject(asgn.projectId)}
                             onResizeEnd={(newStart, newEnd) =>
-                              updateAssignment(person.id, a.projectId, { startDate: newStart, endDate: newEnd })
+                              recordDraft(person.id, asgn.projectId, newStart, newEnd)
                             }
                           />
                         </div>
@@ -395,22 +339,44 @@ export default function TimelinePage() {
               )
             })}
 
-            {/* Today vertical line — spans full body height, dashed */}
-            <div
-              style={{
-                position: 'absolute',
-                left: todayLineX - 1,
-                top: HEADER_HEIGHT,
-                bottom: 0,
-                width: 2,
-                background: 'repeating-linear-gradient(to bottom, var(--brand-primary) 0px, var(--brand-primary) 4px, transparent 4px, transparent 8px)',
-                opacity: 0.9,
-                zIndex: 5,
-                pointerEvents: 'none',
-              }}
-            />
+            {/* Today vertical line — solid 2px, neutral tokens */}
+            <div style={{
+              position: 'absolute',
+              left:   todayLineX - 1,
+              top:    HEADER_HEIGHT,
+              bottom: 0,
+              width:  2,
+              backgroundColor: 'var(--neutral-darkest, #18181b)',
+              zIndex: 5,
+              pointerEvents: 'none',
+            }} />
+
           </div>
         </div>
+
+        {/* ── Draft footer ─────────────────────────────────────────────────── */}
+        {isDraft && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 24px', flexShrink: 0,
+            borderTop: '1px solid var(--info-border, #bae6fd)',
+            backgroundColor: 'var(--info-bg, #f0f9ff)',
+          }}>
+            <span style={{ fontSize: 12, color: 'var(--info-text, #0369a1)' }}>
+              {drafts.size} unsaved change{drafts.size !== 1 ? 's' : ''}
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={discardDrafts}
+                style={{ height: 32, padding: '0 16px', borderRadius: 8, border: '1px solid var(--info-border, #bae6fd)', backgroundColor: 'transparent', color: 'var(--info-text, #0369a1)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+              >Discard</button>
+              <button
+                onClick={applyDrafts}
+                style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', backgroundColor: '#06b6d4', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+              >Apply Changes</button>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
