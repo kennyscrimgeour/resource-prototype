@@ -240,6 +240,14 @@ input[type=range].alloc-slider::-moz-range-thumb {
   box-shadow: 0 1px 4px rgba(0,0,0,0.18);
 }
 
+/* ── Card interactive hover ────────────────────────────────────────────────── */
+.card-interactive {
+  transition: box-shadow 0.2s ease-in-out;
+}
+.card-interactive:hover {
+  box-shadow: 0 0 0 2px var(--border-secondary);
+}
+
 /* ── Base styles ───────────────────────────────────────────────────────────── */
 body {
   background-color: var(--bg-primary);

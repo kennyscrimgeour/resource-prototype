@@ -118,9 +118,9 @@ export default function PersonCard({ person, projects, onOpen }: PersonCardProps
 
   return (
     <div
-      className="flex flex-col gap-3 relative rounded-[10px]"
+      className="flex flex-col gap-3 relative rounded-[10px] card-interactive"
       style={{
-        backgroundColor: 'var(--bg-primary)',
+        background: 'radial-gradient(ellipse at top center, var(--bg-primary) 0%, var(--bg-secondary) 100%)',
         border: '1px solid var(--border-primary)',
         padding: 16,
         cursor: onOpen ? 'pointer' : 'default',

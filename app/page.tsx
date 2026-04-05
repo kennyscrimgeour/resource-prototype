@@ -41,7 +41,7 @@ export default function ProjectsView() {
   ]
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: 'radial-gradient(ellipse at top center, var(--bg-secondary) 0%, var(--bg-tertiary) 100%)' }}>
       <Sidebar activePage="projects" />
 
       <div className="flex flex-col flex-1 min-w-0">

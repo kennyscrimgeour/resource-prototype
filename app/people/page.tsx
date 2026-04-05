@@ -80,7 +80,7 @@ export default function PeoplePage() {
   const overCount  = people.filter(p => getActiveAlloc(p) > 100).length
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: 'radial-gradient(ellipse at top center, var(--bg-secondary) 0%, var(--bg-tertiary) 100%)' }}>
       <Sidebar activePage="people" />
 
       <div className="flex flex-col flex-1 min-w-0">

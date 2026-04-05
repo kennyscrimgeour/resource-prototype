@@ -24,8 +24,8 @@ export default function ProjectCard({ project, budget, onOpen, onOpenPerson }: {
 
   return (
     <div
-      className="flex flex-col rounded-xl border p-5 gap-3"
-      style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)', cursor: onOpen ? 'pointer' : 'default' }}
+      className="flex flex-col rounded-xl p-5 gap-3 card-interactive"
+      style={{ background: 'radial-gradient(ellipse at top center, var(--bg-primary) 0%, var(--bg-secondary) 100%)', border: '1px solid var(--border-primary)', cursor: onOpen ? 'pointer' : 'default' }}
       onClick={onOpen}
     >
       {/* Header */}
