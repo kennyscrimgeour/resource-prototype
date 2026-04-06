@@ -240,6 +240,34 @@ input[type=range].alloc-slider::-moz-range-thumb {
   box-shadow: 0 1px 4px rgba(0,0,0,0.18);
 }
 
+/* ── Timeline stub hover ───────────────────────────────────────────────────── */
+.timeline-stub-hover:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root.dark .timeline-stub-hover:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* ── Dialog row hover ───────────────────────────────────────────────────────── */
+.dialog-row-hover:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+:root.dark .dialog-row-hover:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* ── Jump links inside dialogs ─────────────────────────────────────────────── */
+.jump-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.jump-link:hover {
+  color: var(--text-brand) !important;
+  text-decoration-color: currentColor;
+}
+
 /* ── Card interactive hover ────────────────────────────────────────────────── */
 .card-interactive {
   transition: box-shadow 0.2s ease-in-out;

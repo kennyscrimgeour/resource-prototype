@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { useStore } from '@/lib/store'
+import type { ProjectDialogDraftItem } from '@/lib/store'
 import type { Project } from '@/data/projects'
 import type { Assignment, Person } from '@/data/people'
 import { computeProjectBudget, businessDaysBetween, getPhaseDateRanges } from '@/lib/budget'
@@ -9,6 +10,7 @@ import Avatar from '@/components/ui/Avatar'
 import Badge from '@/components/ui/Badge'
 import BudgetBar from '@/components/ui/BudgetBar'
 import PhaseProgressBar from '@/components/ui/PhaseProgressBar'
+import { ChevronLeft } from 'lucide-react'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -20,10 +22,7 @@ const PROJECT_COLORS: Record<string, string> = {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-interface DraftAssignment {
-  personId:   string
-  assignment: Assignment
-}
+type DraftAssignment = ProjectDialogDraftItem
 
 // 'move' drags both handles together (Stone Rule: blocked if startDate ≤ today)
 interface GanttDragState {
@@ -209,12 +208,25 @@ const GANTT_H = 24
 // ── Component ──────────────────────────────────────────────────────────────────
 
 interface ProjectDialogProps {
-  project: Project
-  onClose: () => void
+  project:               Project
+  onClose:               () => void
+  canGoBack?:            boolean
+  onBack?:               () => void
+  onNavigateToPerson?:   (personId: string) => void
+  globalDirtyCount?:     number
 }
 
-export default function ProjectDialog({ project, onClose }: ProjectDialogProps) {
-  const { people, addAssignment, removeAssignment, updateAssignment, timelineDrafts, recordTimelineDraft, clearProjectTimelineDrafts } = useStore()
+export default function ProjectDialog({
+  project, onClose,
+  canGoBack = false, onBack,
+  onNavigateToPerson,
+  globalDirtyCount = 0,
+}: ProjectDialogProps) {
+  const {
+    people, timelineDrafts, recordTimelineDraft,
+    personDialogDrafts, projectDialogDrafts, setProjectDialogDraft, clearProjectDialogDraft,
+    applyAllDialogDrafts, discardAllDialogDrafts,
+  } = useStore()
 
   const todayISO = useMemo(() => {
     const d = new Date()
@@ -226,17 +238,29 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
   const monthMarkers = useMemo(() => getMonthMarkers(project.startDate, project.endDate, projDays), [project.startDate, project.endDate, projDays])
   const barColor     = PROJECT_COLORS[project.id] ?? '#06b6d4'
 
-  // ── Draft state — seed with store snapshot, then overlay any pending timeline drags ──
+  // ── Draft state — restore parked draft if navigated back, else snapshot from store ──
   const [draft, setDraft] = useState<DraftAssignment[]>(() => {
+    const parked = projectDialogDrafts.get(project.id)
+    if (parked) return parked.draft
     const base = snapshotDraft(people, project.id)
     return base.map(da => {
+      // Prefer in-flight PersonDialog draft (has allocation % + any date changes)
+      const personDraft = personDialogDrafts.get(da.personId)
+      if (personDraft) {
+        const personEntry = personDraft.draft.find(d => d.projectId === project.id)
+        if (personEntry) return { ...da, assignment: { ...personEntry.assignment } }
+      }
       const tlDraft = timelineDrafts.get(`${da.personId}:${project.id}`)
-      if (!tlDraft) return da
-      return { ...da, assignment: { ...da.assignment, startDate: tlDraft.startDate, endDate: tlDraft.endDate } }
+      if (tlDraft) return { ...da, assignment: { ...da.assignment, startDate: tlDraft.startDate, endDate: tlDraft.endDate } }
+      return da
     })
   })
-  // committed = the store's actual saved state (no timeline draft overlay)
-  const [committed, setCommitted] = useState<DraftAssignment[]>(() => snapshotDraft(people, project.id))
+  // committed = the store's actual saved state (no overlay)
+  const [committed, setCommitted] = useState<DraftAssignment[]>(() => {
+    const parked = projectDialogDrafts.get(project.id)
+    if (parked) return parked.committed
+    return snapshotDraft(people, project.id)
+  })
 
   // bars that were modified by a timeline drag but not yet applied
   const timelineEditedIds = useMemo(() =>
@@ -264,12 +288,24 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
   // Sticky draft: once any edit is made the footer stays visible even if user manually reverts
   const [everEdited, setEverEdited] = useState(false)
   const isDirty = everEdited || !draftsEqual(draft, committed)
+  const showFooter = isDirty || globalDirtyCount > 0
+
+  // Park draft in global store so navigation doesn't lose state
+  useEffect(() => {
+    if (isDirty) {
+      setProjectDialogDraft(project.id, { draft, committed })
+    } else {
+      clearProjectDialogDraft(project.id)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, isDirty])
 
   const [showLedger,    setShowLedger]    = useState(true)
   const [showExitGuard, setShowExitGuard] = useState(false)
 
   function attemptClose() {
-    if (isDirty) { setShowExitGuard(true); return }
+    if (showFooter) { setShowExitGuard(true); return }
+    clearProjectDialogDraft(project.id)
     onClose()
   }
 
@@ -472,22 +508,18 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
   }
 
   function handleApply() {
-    for (const c of committed)
-      if (!draft.some(d => d.personId === c.personId)) removeAssignment(c.personId, project.id)
-    for (const d of draft)
-      if (!committed.some(c => c.personId === d.personId)) addAssignment(d.personId, d.assignment)
-    for (const d of draft) {
-      const c = committed.find(c => c.personId === d.personId)
-      if (c && JSON.stringify(c.assignment) !== JSON.stringify(d.assignment))
-        updateAssignment(d.personId, project.id, d.assignment)
-    }
+    // Ensure current state is parked before applying all
+    setProjectDialogDraft(project.id, { draft, committed })
+    applyAllDialogDrafts()
     setCommitted(draft)
     setEverEdited(false)
-    clearProjectTimelineDrafts(project.id)
+    onClose()
   }
   function handleCancel() {
+    // Discard everything globally + reset local state
     setDraft(committed)
     setEverEdited(false)
+    discardAllDialogDrafts()
   }
 
   // ── Gantt helpers ─────────────────────────────────────────────────────────────
@@ -526,14 +558,33 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
           <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-primary)', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Badge variant={STATUS_VARIANT[project.status] ?? 'default'} size="sm">{project.status}</Badge>
                   <Badge variant="default" size="sm">{project.sector}</Badge>
-                  {isDirty && (
+                  {showFooter && (
                     <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--info-text, #0369a1)', backgroundColor: 'var(--info-bg, #f0f9ff)', border: '1px solid var(--info-border, #bae6fd)', borderRadius: 4, padding: '2px 6px', textTransform: 'uppercase' }}>Draft</span>
                   )}
                 </div>
-                <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 }}>{project.name}</h2>
+                {/* Chevron directly left of the project name */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {canGoBack && (
+                    <button
+                      onClick={() => { setProjectDialogDraft(project.id, { draft, committed }); onBack?.() }}
+                      style={{
+                        flexShrink: 0, width: 32, height: 32, borderRadius: '50%', marginLeft: -4,
+                        border: 'none', backgroundColor: 'transparent', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'var(--text-secondary)', transition: 'background-color 0.15s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      title="Go back"
+                    >
+                      <ChevronLeft size={22} strokeWidth={2.5} />
+                    </button>
+                  )}
+                  <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 }}>{project.name}</h2>
+                </div>
                 <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>{project.client}</p>
               </div>
               <button onClick={attemptClose} style={{ ...ACTION_BTN, flexShrink: 0, width: 32, height: 32, borderRadius: 8, fontSize: 14 }}>✕</button>
@@ -700,14 +751,22 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
                     style={{
                       ...ROW,
                       backgroundColor: isDraftRow ? 'var(--info-bg, #f0f9ff)' : 'transparent',
-                      transition: 'background-color 0.15s',
+                      transition: 'background-color 0.12s',
                     }}
                   >
-                    {/* Avatar */}
-                    <Avatar initials={person.initials} size="xs" colorIndex={person.colorIndex ?? 0} />
+                    {/* Avatar — part of the click anchor, sits outside the cell */}
+                    <Avatar
+                      initials={person.initials} size="xs" colorIndex={person.colorIndex ?? 0}
+                      style={{ cursor: onNavigateToPerson ? 'pointer' : 'default' }}
+                      onClick={() => onNavigateToPerson?.(person.id)}
+                    />
 
-                    {/* Person — tighter gap, day rate badge inline */}
-                    <div style={{ minWidth: 0 }}>
+                    {/* Person name/role — the click anchor for navigation */}
+                    <div
+                      className={onNavigateToPerson ? 'dialog-row-hover' : undefined}
+                      style={{ minWidth: 0, borderRadius: 4, padding: '2px 4px', margin: '-2px -4px', cursor: onNavigateToPerson ? 'pointer' : 'default' }}
+                      onClick={() => onNavigateToPerson?.(person.id)}
+                    >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }}>
                         <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0, minWidth: 0 }}>{person.name}</p>
                         {person.dayRate && (
@@ -879,10 +938,15 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
           </div>
 
           {/* ── Apply / Discard footer ────────────────────────────────── */}
-          {isDirty && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '12px 24px', borderTop: '1px solid var(--info-border, #bae6fd)', backgroundColor: 'var(--info-bg, #f0f9ff)', flexShrink: 0, gap: 8 }}>
-              <button onClick={handleCancel} style={{ height: 32, padding: '0 16px', borderRadius: 8, border: '1px solid var(--info-border, #bae6fd)', backgroundColor: 'transparent', color: 'var(--info-text, #0369a1)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Discard</button>
-              <button onClick={handleApply} style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', backgroundColor: '#06b6d4', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Apply Changes</button>
+          {showFooter && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderTop: '1px solid var(--info-border, #bae6fd)', backgroundColor: 'var(--info-bg, #f0f9ff)', flexShrink: 0, gap: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--info-text, #0369a1)', fontWeight: 500 }}>
+                {globalDirtyCount > 0 ? `${globalDirtyCount} unsaved change${globalDirtyCount !== 1 ? 's' : ''} across dialogs` : 'Unsaved changes'}
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handleCancel} style={{ height: 32, padding: '0 16px', borderRadius: 8, border: '1px solid var(--info-border, #bae6fd)', backgroundColor: 'transparent', color: 'var(--info-text, #0369a1)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Discard All</button>
+                <button onClick={handleApply} style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', backgroundColor: '#06b6d4', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Apply All</button>
+              </div>
             </div>
           )}
 
@@ -926,7 +990,7 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button onClick={() => setShowExitGuard(false)} style={{ height: 32, padding: '0 16px', borderRadius: 8, border: '1px solid var(--border-primary)', backgroundColor: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Keep editing</button>
-              <button onClick={onClose} style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', backgroundColor: 'var(--error-text, #ef4444)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Discard &amp; close</button>
+              <button onClick={() => { discardAllDialogDrafts(); onClose() }} style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', backgroundColor: 'var(--error-text, #ef4444)', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Discard &amp; close</button>
             </div>
           </div>
         </>

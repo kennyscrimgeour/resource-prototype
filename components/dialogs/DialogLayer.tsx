@@ -1,18 +1,47 @@
 'use client'
 
-import { useDialog } from '@/lib/useDialog'
-import { useStore } from '@/lib/store'
-import ProjectDialog from './ProjectDialog'
-import PersonDialog from './PersonDialog'
+import { useDialogNav } from '@/lib/dialogNav'
+import { useStore }     from '@/lib/store'
+import ProjectDialog    from './ProjectDialog'
+import PersonDialog     from './PersonDialog'
 
 export default function DialogLayer() {
-  const { projectId, personId, close } = useDialog()
-  const { projects, people }           = useStore()
+  const { current, canGoBack, push, pop, close } = useDialogNav()
+  const { projects, people, pendingChangeCount }  = useStore()
 
-  const project = projectId ? projects.find(p => p.id === projectId) ?? null : null
-  const person  = personId  ? people.find(p => p.id === personId)    ?? null : null
+  if (!current) return null
 
-  if (project) return <ProjectDialog project={project} onClose={close} />
-  if (person)  return <PersonDialog  person={person}   onClose={close} />
+  const totalDirty = pendingChangeCount()
+
+  if (current.type === 'project') {
+    const project = projects.find(p => p.id === current.id)
+    if (!project) return null
+    return (
+      <ProjectDialog
+        project={project}
+        onClose={close}
+        canGoBack={canGoBack}
+        onBack={pop}
+        onNavigateToPerson={(id) => push({ type: 'person', id })}
+        globalDirtyCount={totalDirty}
+      />
+    )
+  }
+
+  if (current.type === 'person') {
+    const person = people.find(p => p.id === current.id)
+    if (!person) return null
+    return (
+      <PersonDialog
+        person={person}
+        onClose={close}
+        canGoBack={canGoBack}
+        onBack={pop}
+        onNavigateToProject={(id) => push({ type: 'project', id })}
+        globalDirtyCount={totalDirty}
+      />
+    )
+  }
+
   return null
 }

@@ -26,6 +26,7 @@ export default function TimelineStub({
 
   return (
     <div
+      className="timeline-stub-hover"
       style={{
         width: STUB_WIDTH,
         height,
@@ -39,6 +40,8 @@ export default function TimelineStub({
         borderRight: '1px solid var(--border-tertiary)',
         borderBottom: '1px solid var(--border-tertiary)',
         overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'background-color 0.12s',
       }}
     >
       <Avatar initials={initials} size="xs" colorIndex={colorIndex} style={{ flexShrink: 0 }} />

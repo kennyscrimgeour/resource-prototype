@@ -1,27 +1,15 @@
 'use client'
 
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { useCallback } from 'react'
+import { useDialogNav } from '@/lib/dialogNav'
 
 export function useDialog() {
-  const router       = useRouter()
-  const pathname     = usePathname()
-  const searchParams = useSearchParams()
+  const { current, open, close } = useDialogNav()
 
-  const projectId = searchParams.get('project')
-  const personId  = searchParams.get('person')
+  const projectId = current?.type === 'project' ? current.id : null
+  const personId  = current?.type === 'person'  ? current.id : null
 
-  const openProject = useCallback((id: string) => {
-    router.push(`${pathname}?project=${id}`)
-  }, [router, pathname])
-
-  const openPerson = useCallback((id: string) => {
-    router.push(`${pathname}?person=${id}`)
-  }, [router, pathname])
-
-  const close = useCallback(() => {
-    router.push(pathname)
-  }, [router, pathname])
+  function openProject(id: string) { open({ type: 'project', id }) }
+  function openPerson(id: string)  { open({ type: 'person',  id }) }
 
   return { projectId, personId, openProject, openPerson, close }
 }
