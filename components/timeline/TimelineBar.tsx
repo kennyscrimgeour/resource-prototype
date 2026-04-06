@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { businessDaysBetween } from '@/lib/budget'
+import { STUB_WIDTH } from '@/components/timeline/TimelineStub'
 
 interface TimelineBarProps {
   projectName:    string
@@ -15,6 +16,7 @@ interface TimelineBarProps {
   colWidth?:      number
   weeks?:         Date[]
   todayCol?:      number
+  isDraft?:       boolean
   onResizeEnd?:   (newStartISO: string, newEndISO: string) => void
   onBarClick?:    () => void
 }
@@ -48,6 +50,7 @@ function computeCost(startISO: string, endISO: string, dayRate: number, allocati
 export default function TimelineBar({
   projectName, client, color, width, dayRate,
   allocationPct, startCol, endCol, colWidth, weeks, todayCol,
+  isDraft,
   onResizeEnd, onBarClick,
 }: TimelineBarProps) {
   const [liveMarginLeft, setLiveMarginLeft] = useState(0)
@@ -82,7 +85,7 @@ export default function TimelineBar({
   function handleMouseDown(handle: 'left' | 'right' | 'move', e: React.MouseEvent) {
     if ((handle === 'left' || handle === 'move') && leftLocked) return
     e.preventDefault(); e.stopPropagation()
-    clickBlockRef.current = true
+    // clickBlock is set only on actual movement, not on bare mousedown
     dragRef.current = {
       handle, startX: e.clientX,
       baseMarginLeft: liveMarginLeft, baseWidth: liveWidth,
@@ -112,6 +115,8 @@ export default function TimelineBar({
     function onMouseMove(e: MouseEvent) {
       const drag = dragRef.current
       if (!drag) return
+      // Only block click once the user has actually moved during a drag
+      if (!clickBlockRef.current) clickBlockRef.current = true
       const dcols = Math.round((e.clientX - drag.startX) / cw)
       const { newStartCol, newEndCol } = clampCols(drag, dcols)
 
@@ -196,12 +201,18 @@ export default function TimelineBar({
   // inside a wrapper that is NOT overflow:hidden. The visual bar fill uses overflow:hidden.
   // This is the cleanest CSS-only approach.
 
+  // ── Draft / ghost derived styles ─────────────────────────────────────────
+  const ghostFill    = `color-mix(in srgb, ${color} 20%, transparent)`
+  const dividerColor = isDraft
+    ? `color-mix(in srgb, ${color} 40%, transparent)`
+    : 'rgba(255,255,255,0.4)'
+  const textColor    = isDraft ? color : '#fff'
+  const subTextColor = isDraft ? color : 'rgba(255,255,255,0.65)'
+  const dateColor    = isDraft ? color : 'rgba(255,255,255,0.8)'
+  const gripColor    = isDraft ? color : 'rgba(255,255,255,0.5)'
+
   return (
     <>
-      {/*
-        Outer wrapper: NOT overflow:hidden — allows sticky label to pin.
-        Visual bar fill is a separate absolute child.
-      */}
       <div
         style={{
           width: liveWidth, marginLeft: liveMarginLeft,
@@ -209,20 +220,23 @@ export default function TimelineBar({
           position: 'relative', flexShrink: 0,
           cursor: isDraggable ? 'pointer' : 'default',
           userSelect: 'none',
+          border: isDraft ? `1px solid ${color}` : 'none',
+          boxSizing: 'border-box',
         }}
         onClick={() => { if (!clickBlockRef.current) onBarClick?.() }}
       >
-        {/* Visual fill — overflow:hidden clips right bookend */}
+        {/* Visual fill — full-span, overflow:hidden for right bookend */}
         <div style={{
           position: 'absolute', inset: 0,
-          backgroundColor: color, borderRadius: 4,
+          backgroundColor: isDraft ? ghostFill : color,
+          borderRadius: isDraft ? 3 : 4,
           overflow: 'hidden', zIndex: 0,
         }}>
           {/* Right bookend — end date */}
           {endLabel && liveWidth >= 40 && (
             <span style={{
               position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-              fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.8)',
+              fontSize: 9, fontWeight: 600, color: dateColor,
               whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 1,
             }}>
               {endLabel}
@@ -230,43 +244,46 @@ export default function TimelineBar({
           )}
         </div>
 
-        {/* ── Sticky label: name / client (stacked) + start date ───────── */}
+        {/* ── Sticky label: pins to stub right edge when bar scrolls under it */}
         {liveWidth >= 48 && (
           <div style={{
-            position: 'sticky', left: 6,
-            /* Absolute in normal flow avoids pushing siblings */
-            top: 0, bottom: 0,
-            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 5,
-            width: 'max-content', maxWidth: liveWidth - 20,
+            position: 'sticky', left: STUB_WIDTH,
+            top: 0, bottom: 0, height: '100%',
+            paddingLeft: 12,
+            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6,
+            width: 'max-content', maxWidth: liveWidth - 16,
             overflow: 'hidden',
             zIndex: 5, pointerEvents: 'none',
           }}>
             {/* Name + client — stacked column */}
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0, flexShrink: 1 }}>
               <span style={{
-                fontSize: 10, fontWeight: 700, color: '#fff', lineHeight: 1.3,
+                fontSize: 10, fontWeight: 700, color: textColor, lineHeight: 1.3,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
               }}>
                 {projectName}
               </span>
               {liveWidth >= 110 && (
                 <span style={{
-                  fontSize: 8, fontWeight: 400, color: 'rgba(255,255,255,0.6)', lineHeight: 1.3,
+                  fontSize: 8, fontWeight: 400, color: subTextColor, lineHeight: 1.3,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {client}
                 </span>
               )}
             </div>
-            {/* Start date — to the right of name/client, styled like end date */}
+
+            {/* Divider + start date — only when bar is wide enough */}
             {startLabel && liveWidth >= 90 && (
-              <span style={{
-                fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.8)',
-                whiteSpace: 'nowrap', flexShrink: 0,
-              }}>
-                {startLabel}
-              </span>
+              <>
+                <div style={{ width: 1, height: 14, backgroundColor: dividerColor, flexShrink: 0 }} />
+                <span style={{
+                  fontSize: 9, fontWeight: 600, color: dateColor,
+                  whiteSpace: 'nowrap', flexShrink: 0,
+                }}>
+                  {startLabel}
+                </span>
+              </>
             )}
           </div>
         )}
@@ -274,17 +291,17 @@ export default function TimelineBar({
         {/* Left handle */}
         {isDraggable && !leftLocked && (
           <div
-            style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 10, cursor: 'ew-resize', zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onMouseDown={e => handleMouseDown('left', e)}
           >
-            <div style={{ width: 2, height: 10, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.5)' }} />
+            <div style={{ width: 2, height: 10, borderRadius: 1, backgroundColor: gripColor }} />
           </div>
         )}
 
-        {/* Move handle */}
+        {/* Move handle — starts after handle dead-zone */}
         {isDraggable && !leftLocked && (
           <div
-            style={{ position: 'absolute', left: 8, right: 8, top: 0, bottom: 0, cursor: 'grab', zIndex: 4 }}
+            style={{ position: 'absolute', left: 10, right: 10, top: 0, bottom: 0, cursor: 'grab', zIndex: 4 }}
             onMouseDown={e => handleMouseDown('move', e)}
           />
         )}
@@ -292,10 +309,10 @@ export default function TimelineBar({
         {/* Right handle */}
         {isDraggable && (
           <div
-            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 10, cursor: 'ew-resize', zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onMouseDown={e => handleMouseDown('right', e)}
           >
-            <div style={{ width: 2, height: 10, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.5)' }} />
+            <div style={{ width: 2, height: 10, borderRadius: 1, backgroundColor: gripColor }} />
           </div>
         )}
       </div>

@@ -14,7 +14,7 @@ import type { Assignment } from '@/data/people'
 import { Bell } from 'lucide-react'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const COL_W = 76
+const COL_W = 11   // px per calendar day — gives ~77px per week, day-level snap
 const BAR_H = 28
 
 // ── Project → colour token ────────────────────────────────────────────────────
@@ -24,31 +24,16 @@ const PROJECT_COLORS: Record<string, string> = {
   '9':  '#06b6d4', '10': '#8b5cf6', '11': '#10b981',
 }
 
-// ── Draft type ────────────────────────────────────────────────────────────────
-interface DraftChange {
-  personId:  string
-  projectId: string
-  startDate: string
-  endDate:   string
-}
-
 // ── Date helpers ──────────────────────────────────────────────────────────────
-function getMonday(d: Date): Date {
-  const result = new Date(d); result.setHours(0, 0, 0, 0)
-  const day = result.getDay()
-  result.setDate(result.getDate() + (day === 0 ? -6 : 1 - day))
-  return result
-}
-
-function generateWeeks(startISO: string, endISO: string): Date[] {
-  const weeks: Date[] = []
-  let current = getMonday(new Date(startISO))
-  const end   = getMonday(new Date(endISO))
-  while (current <= end) {
-    weeks.push(new Date(current))
-    current = new Date(current); current.setDate(current.getDate() + 7)
+function generateDays(startISO: string, endISO: string): Date[] {
+  const days: Date[] = []
+  const cur = new Date(startISO); cur.setHours(0, 0, 0, 0)
+  const end = new Date(endISO);   end.setHours(0, 0, 0, 0)
+  while (cur <= end) {
+    days.push(new Date(cur))
+    cur.setDate(cur.getDate() + 1)
   }
-  return weeks
+  return days
 }
 
 function getColIndex(weeks: Date[], isoDate: string): number {
@@ -97,37 +82,17 @@ function HudDivider() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function TimelinePage() {
-  const { people, projects, toggleTheme, updateAssignment } = useStore()
+  const { people, projects, toggleTheme, timelineDrafts, recordTimelineDraft, applyTimelineDrafts, discardTimelineDrafts } = useStore()
   const { openProject, openPerson } = useDialog()
   const [deptFilter, setDeptFilter] = useState<DeptFilter>('All')
   const [viewMode]                  = useState<ViewMode>('Wk')
   const scrollRef                   = useRef<HTMLDivElement>(null)
 
-  // ── Draft state ───────────────────────────────────────────────────────────
-  // Map key: `${personId}:${projectId}`
-  const [drafts, setDrafts]       = useState<Map<string, DraftChange>>(new Map())
-  const isDraft                   = drafts.size > 0
-
-  function recordDraft(personId: string, projectId: string, startDate: string, endDate: string) {
-    setDrafts(prev => {
-      const next = new Map(prev)
-      next.set(`${personId}:${projectId}`, { personId, projectId, startDate, endDate })
-      return next
-    })
-  }
-
-  function applyDrafts() {
-    drafts.forEach(({ personId, projectId, startDate, endDate }) => {
-      updateAssignment(personId, projectId, { startDate, endDate })
-    })
-    setDrafts(new Map())
-  }
-
-  function discardDrafts() { setDrafts(new Map()) }
+  const isDraft = timelineDrafts.size > 0
 
   // ── Effective assignment (draft overlay) ──────────────────────────────────
   function effectiveAssignment(personId: string, asgn: Assignment): Assignment {
-    const draft = drafts.get(`${personId}:${asgn.projectId}`)
+    const draft = timelineDrafts.get(`${personId}:${asgn.projectId}`)
     return draft ? { ...asgn, startDate: draft.startDate, endDate: draft.endDate } : asgn
   }
 
@@ -135,7 +100,7 @@ export default function TimelinePage() {
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
   const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
-  const weeks    = useMemo(() => generateWeeks('2025-10-06', '2026-12-28'), [])
+  const weeks    = useMemo(() => generateDays('2025-10-06', '2026-12-28'), [])
   const todayCol = useMemo(() => getColIndex(weeks, todayISO), [weeks, todayISO])
 
   const filteredPeople = useMemo(
@@ -309,7 +274,7 @@ export default function TimelinePage() {
                       const proj     = projects.find(p => p.id === asgn.projectId)
                       if (!proj) return null
 
-                      const isDraftBar = drafts.has(`${person.id}:${asgn.projectId}`)
+                      const isDraftBar = timelineDrafts.has(`${person.id}:${asgn.projectId}`)
                       const color      = PROJECT_COLORS[asgn.projectId] ?? '#06b6d4'
 
                       return (
@@ -317,7 +282,7 @@ export default function TimelinePage() {
                           <TimelineBar
                             projectName={proj.name}
                             client={proj.client}
-                            color={isDraftBar ? '#3b82f6' : color}
+                            color={color}
                             width={barWidth}
                             dayRate={person.dayRate ?? 0}
                             allocationPct={asgn.allocationPct}
@@ -326,9 +291,10 @@ export default function TimelinePage() {
                             colWidth={COL_W}
                             weeks={weeks}
                             todayCol={todayCol}
+                            isDraft={isDraftBar}
                             onBarClick={() => openProject(asgn.projectId)}
                             onResizeEnd={(newStart, newEnd) =>
-                              recordDraft(person.id, asgn.projectId, newStart, newEnd)
+                              recordTimelineDraft(person.id, asgn.projectId, newStart, newEnd)
                             }
                           />
                         </div>
@@ -363,15 +329,15 @@ export default function TimelinePage() {
             backgroundColor: 'var(--info-bg, #f0f9ff)',
           }}>
             <span style={{ fontSize: 12, color: 'var(--info-text, #0369a1)' }}>
-              {drafts.size} unsaved change{drafts.size !== 1 ? 's' : ''}
+              {timelineDrafts.size} unsaved change{timelineDrafts.size !== 1 ? 's' : ''}
             </span>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={discardDrafts}
+                onClick={discardTimelineDrafts}
                 style={{ height: 32, padding: '0 16px', borderRadius: 8, border: '1px solid var(--info-border, #bae6fd)', backgroundColor: 'transparent', color: 'var(--info-text, #0369a1)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
               >Discard</button>
               <button
-                onClick={applyDrafts}
+                onClick={applyTimelineDrafts}
                 style={{ height: 32, padding: '0 16px', borderRadius: 8, border: 'none', backgroundColor: '#06b6d4', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
               >Apply Changes</button>
             </div>

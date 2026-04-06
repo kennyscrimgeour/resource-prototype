@@ -214,7 +214,7 @@ interface ProjectDialogProps {
 }
 
 export default function ProjectDialog({ project, onClose }: ProjectDialogProps) {
-  const { people, addAssignment, removeAssignment, updateAssignment } = useStore()
+  const { people, addAssignment, removeAssignment, updateAssignment, timelineDrafts, recordTimelineDraft, clearProjectTimelineDrafts } = useStore()
 
   const todayISO = useMemo(() => {
     const d = new Date()
@@ -226,9 +226,40 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
   const monthMarkers = useMemo(() => getMonthMarkers(project.startDate, project.endDate, projDays), [project.startDate, project.endDate, projDays])
   const barColor     = PROJECT_COLORS[project.id] ?? '#06b6d4'
 
-  // ── Draft state ───────────────────────────────────────────────────────────────
-  const [draft,     setDraft]     = useState<DraftAssignment[]>(() => snapshotDraft(people, project.id))
+  // ── Draft state — seed with store snapshot, then overlay any pending timeline drags ──
+  const [draft, setDraft] = useState<DraftAssignment[]>(() => {
+    const base = snapshotDraft(people, project.id)
+    return base.map(da => {
+      const tlDraft = timelineDrafts.get(`${da.personId}:${project.id}`)
+      if (!tlDraft) return da
+      return { ...da, assignment: { ...da.assignment, startDate: tlDraft.startDate, endDate: tlDraft.endDate } }
+    })
+  })
+  // committed = the store's actual saved state (no timeline draft overlay)
   const [committed, setCommitted] = useState<DraftAssignment[]>(() => snapshotDraft(people, project.id))
+
+  // bars that were modified by a timeline drag but not yet applied
+  const timelineEditedIds = useMemo(() =>
+    new Set(
+      Array.from(timelineDrafts.values())
+        .filter(d => d.projectId === project.id)
+        .map(d => d.personId)
+    ),
+    [timelineDrafts, project.id]
+  )
+
+  // Real-time sync: push date changes from dialog draft back to timeline
+  useEffect(() => {
+    for (const da of draft) {
+      const c = committed.find(x => x.personId === da.personId)
+      if (!c) continue
+      if (da.assignment.startDate !== c.assignment.startDate ||
+          da.assignment.endDate   !== c.assignment.endDate) {
+        recordTimelineDraft(da.personId, project.id, da.assignment.startDate, da.assignment.endDate)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft])
 
   // Sticky draft: once any edit is made the footer stays visible even if user manually reverts
   const [everEdited, setEverEdited] = useState(false)
@@ -452,6 +483,7 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
     }
     setCommitted(draft)
     setEverEdited(false)
+    clearProjectTimelineDrafts(project.id)
   }
   function handleCancel() {
     setDraft(committed)
@@ -645,7 +677,7 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
                 // Stone Rule: move handle locked only if start is strictly before today
                 const moveLocked = asgn.startDate < todayISO
 
-                const fillColor = isNew ? '#3b82f6' : barColor
+                const fillColor = barColor
 
                 // Landing cost = locked actuals (committed %) + projected (current slider %)
                 const committedEntry2    = committed.find(c => c.personId === person.id)
@@ -711,26 +743,31 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
                       {monthMarkers.map(m => (
                         <div key={m.leftPct} style={{ position: 'absolute', left: `${m.leftPct}%`, top: 0, bottom: 0, width: 1, backgroundColor: 'var(--border-secondary)', pointerEvents: 'none', zIndex: 0 }} />
                       ))}
-                      {/* Fill bar */}
+                      {/* Fill bar — ghost style for new (unsaved) rows */}
                       <div
                         style={{
                           position: 'absolute', zIndex: 1,
                           left: `${leftPct}%`, width: `${widthPct}%`,
                           top: 0, height: '100%',
-                          backgroundColor: fillColor, borderRadius: 4,
+                          backgroundColor: isDraftRow
+                            ? `color-mix(in srgb, ${fillColor} 20%, transparent)`
+                            : fillColor,
+                          border: isDraftRow ? `1px solid ${fillColor}` : 'none',
+                          borderRadius: 4,
+                          boxSizing: 'border-box',
                           boxShadow: isThisDragging ? `0 0 0 2px ${fillColor}40` : 'none',
                           overflow: 'hidden',
                         }}
                       >
                         {/* Bookend: start date */}
                         {showBookends && (
-                          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap', pointerEvents: 'none', lineHeight: 1 }}>
+                          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 9, fontWeight: 600, color: isDraftRow ? fillColor : 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap', pointerEvents: 'none', lineHeight: 1 }}>
                             {useShortFmt ? fmtShort(liveStart) : fmt(liveStart)}
                           </span>
                         )}
                         {/* Bookend: end date */}
                         {showBookends && (
-                          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap', pointerEvents: 'none', lineHeight: 1 }}>
+                          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 9, fontWeight: 600, color: isDraftRow ? fillColor : 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap', pointerEvents: 'none', lineHeight: 1 }}>
                             {useShortFmt ? fmtShort(liveEnd) : fmt(liveEnd)}
                           </span>
                         )}
@@ -738,7 +775,7 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
                         {!leftLocked && (
                           <div onMouseDown={e => startGanttDrag(e, person.id, 'left', asgn)}
                             style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <div style={{ width: 2, height: 10, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.55)' }} />
+                            <div style={{ width: 2, height: 10, borderRadius: 1, backgroundColor: isDraftRow ? fillColor : 'rgba(255,255,255,0.55)' }} />
                           </div>
                         )}
                         {/* Move handle — center strip, blocked if start ≤ today */}
@@ -749,7 +786,7 @@ export default function ProjectDialog({ project, onClose }: ProjectDialogProps) 
                         {/* Right handle */}
                         <div onMouseDown={e => startGanttDrag(e, person.id, 'right', asgn)}
                           style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <div style={{ width: 2, height: 10, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.55)' }} />
+                          <div style={{ width: 2, height: 10, borderRadius: 1, backgroundColor: isDraftRow ? fillColor : 'rgba(255,255,255,0.55)' }} />
                         </div>
                       </div>
                     </div>
